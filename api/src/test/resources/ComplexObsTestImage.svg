@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:svgjs="http://svgjs.com/svgjs" xmlns:xlink="http://www.w3.org/1999/xlink" height="280px" id="root-svg" style="width: 547px; height: 280px;" version="1.1" width="547px">
+		  
+<rect fill="white" height="100%" width="100%"/>
+	      
+<filter height="130%" id="dropshadow">
+	          
+<feGaussianBlur in="SourceAlpha" stdDeviation="3"/> <!-- stdDeviation is how much to blur -->
+	        <!-- <feComponentTransfer>
+	        <feFuncR type="linear" slope=".01" intercept="1"/>
+	        <feFuncG type="linear" slope="0" intercept="0"/>
+	        <feFuncB type="linear" slope="0" intercept="0"/>
+	        <feFuncA type="linear" slope="0" intercept="1"/>
+	        </feComponentTransfer>  -->
+	        
+	          
+<feComponentTransfer>
+	            
+<feFuncA slope="0.8" type="linear"/> <!-- slope is the opacity of the shadow -->
+	          
+</feComponentTransfer>
+	          
+<feMerge> 
+	            
+<feMergeNode/> <!-- this contains the offset blurred image -->
+	            
+<feMergeNode in="SourceGraphic"/> <!-- this contains the element that the filter is applied to -->
+	          
+</feMerge>
+	        
+</filter>
+	    
+<path d="M223 144L223 144 " fill="none" id="SvgjsPath1008" stroke="black" stroke-width="3"/>
+<path d="M0 0 " fill="none" id="SvgjsPath1009" stroke="black" stroke-width="3"/>
+<text fill="black" font-family="Helvetica, Arial, sans-serif" font-size="14px" id="SvgjsText1010" stroke="black" stroke-width="0.5" x="97" y="79.1249877929688">
+<tspan dy="18.2" id="SvgjsTspan1011" x="97">test svg</tspan>
+</text>
+<defs id="SvgjsDefs1006"/>
+</svg>

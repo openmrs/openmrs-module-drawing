@@ -1,20 +1,28 @@
 package org.openmrs.module.drawing.elements;
 
+import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.xml.parsers.ParserConfigurationException;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+
+import org.openmrs.api.context.Context;
 import org.openmrs.Concept;
 import org.openmrs.Obs;
-import org.openmrs.api.context.Context;
+import org.openmrs.module.drawing.DrawingConstants;
 import org.openmrs.module.drawing.AnnotatedImage;
 import org.openmrs.module.drawing.DrawingUtil;
-import org.openmrs.module.drawing.ImageAnnotation;
 import org.openmrs.module.htmlformentry.FormEntryContext;
 import org.openmrs.module.htmlformentry.FormEntryContext.Mode;
 import org.openmrs.module.htmlformentry.FormEntrySession;
@@ -23,253 +31,494 @@ import org.openmrs.module.htmlformentry.HtmlFormEntryUtil;
 import org.openmrs.module.htmlformentry.action.FormSubmissionControllerAction;
 import org.openmrs.module.htmlformentry.element.HtmlGeneratorElement;
 import org.openmrs.obs.ComplexData;
-import org.openmrs.web.WebConstants;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
 
 //public class DrawingSubmissionElement {
-	public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmissionControllerAction {
+public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmissionControllerAction {
 	
 	private static final Log log = LogFactory.getLog(DrawingSubmissionElement.class);
 	
-	private String id;
+	private String htmlId;
 	
 	private Concept questionConcept;
 	
 	private Obs existingObs;
 	
-	public DrawingSubmissionElement(FormEntryContext context, Map<String, String> parameters) {
-		String questionConceptId = parameters.get("questionConceptId");
-		id = parameters.get("id");
+	private enum DisplayMode {
+		Invalid,
+		Annotation,
+		Signature
+	};
+	
+	private DisplayMode instancePurpose = DisplayMode.Invalid;
+	
+	private String base64preload;
+	
+	private List<String> excludedButtonIds;
+	
+	private boolean required;
+	
+	private String fixedWidth;
+	
+	private String fixedHeight;
+	
+	private Document svgWidgetTemplate;
+	
+	public DrawingSubmissionElement(FormEntryContext context, Map<String, String> parameters)
+	        throws IOException, ParserConfigurationException, SAXException {
+		
+		String questionConceptId = parameters.get("conceptId");
+		
+		//while this is not strictly necessary, it is good practice
+		//it should be worth continuing to enforce this requirement in the long run
+		htmlId = parameters.get("id");
 		
 		if (StringUtils.isBlank(questionConceptId))
-			throw new RuntimeException("questionConceptId cannot be empty");
-		else if (StringUtils.isBlank(id))
-			throw new RuntimeException("id cannot be empty");
+			throw new RuntimeException(DrawingConstants.CONCEPT_ID_MISSING_MSG);
+		else if (StringUtils.isBlank(htmlId))
+			throw new RuntimeException(DrawingConstants.MARKUP_ID_MISSING_MSG);
 		
 		questionConcept = HtmlFormEntryUtil.getConcept(questionConceptId);
-		if (questionConcept == null)
-			throw new IllegalArgumentException("Cannot find concept for value " + questionConceptId
-			        + " in conceptId attribute value. Parameters: " + parameters);
-		Concept c = null;
-		Obs o = context.removeExistingObs(questionConcept, c);
-		if (o != null)
-			existingObs = Context.getObsService().getComplexObs(o.getId(), "");
+		
+		if (questionConcept == null) {
+			String exceptionStr = String.format(DrawingConstants.CONCEPT_NOT_FOUND_MSG, questionConceptId, parameters);
+			
+			throw new IllegalArgumentException(exceptionStr);
+		}
+		
+		if (!questionConcept.isComplex()) {
+			throw new IllegalArgumentException(DrawingConstants.CONCEPT_SIMPLE_MSG);
+		}
+		
+		String requiredParam = parameters.get("required");
+		
+		//Java should have already defaulted the value to false/0
+		required = false;
+		
+		if (requiredParam != null) {
+			required = requiredParam.equals("true");
+		}
+		
+		fixedWidth = parameters.get("width");
+		fixedHeight = parameters.get("height");
+		
+		if (fixedHeight != null) {
+			boolean lastHeightCharIsNumber = StringUtils.isNumeric(fixedHeight.substring(fixedHeight.length() - 1));
+			
+			if (lastHeightCharIsNumber) {
+				throw new IllegalArgumentException(
+				        String.format(DrawingConstants.DIM_MISSING_UNITS_MSG, "height", "height", fixedHeight));
+			}
+		}
+		
+		if (fixedWidth != null) {
+			boolean lastWidthCharIsNumber = StringUtils.isNumeric(fixedWidth.substring(fixedWidth.length() - 1));
+			
+			if (lastWidthCharIsNumber) {
+				throw new IllegalArgumentException(
+				        String.format(DrawingConstants.DIM_MISSING_UNITS_MSG, "width", "width", fixedWidth));
+			}
+		}
+		
+		//Limit features exposed to the user given the intended use of this instance
+		String usedFor = parameters.get("displayMode");
+		
+		//if the string doesnt exist default to blank string
+		if (usedFor == null) {
+			usedFor = "";
+		}
+		
+		for (DisplayMode mode : DisplayMode.values()) {
+			if (usedFor.equals(mode.toString().toLowerCase())) {
+				instancePurpose = mode;
+			}
+		}
+		
+		if (instancePurpose == DisplayMode.Invalid) {
+			String modes = Arrays.asList(DisplayMode.values()).stream().map(new Function<DisplayMode, String>() {
+				
+				@Override
+				public String apply(DisplayMode arg0) {
+					return arg0.toString();
+				}
+			}).collect(Collectors.joining(","));
+			//"Unknown display mode: " + usedFor + " . Known modes are "+ modes
+			throw new IllegalArgumentException(String.format(DrawingConstants.DISPLAY_MODE_UNK_MSG, usedFor, modes));
+		}
+		
+		//Preload a "template" image into the SVG
+		String preloadImage = parameters.get("preloadResImage");
+		
+		if (preloadImage != null) {
+			
+			//get the classes path for modules
+			String resourcePath = DrawingUtil.getServerResourcesPath(preloadImage);
+			
+			//in the view resources for modules
+			//String modulesPath = classesPath + "../view/module/";
+			
+			//File preloadImageFile = new File("/WEB-INF/view/module/"+preloadImage);
+			//load the path for the specific file from a given module
+			File preloadImageFile = new File(resourcePath);
+			
+			//allow the IOException to be thrown, getServerResourcesPath should
+			//throw if no resource was found, but if something else is going wrong
+			//this could indicate it to a module developer, even if it's not obvious to 
+			//the form designer(s)
+			base64preload = DrawingUtil.imageToBase64(preloadImageFile);
+			
+		}
+		
+		String excludeButtons = parameters.get("excludeButtons");
+		if (excludeButtons != null) {
+			String[] ids = excludeButtons.split(",");
+			
+			for (int i = 0; i < ids.length; i++) {
+				ids[i] = ids[i].trim();
+			}
+			
+			excludedButtonIds = Arrays.asList(ids);
+		}
+		
+		Map<Concept, List<Obs>> prevObs = context.getExistingObs();
+		if (prevObs != null && prevObs.size() > 0) {
+			
+			existingObs = prevObs.get(questionConcept).get(0);
+			
+			//make sure the instance is loaded with complexData, according
+			//to getComplexData() comments it won't be guaranteed unless
+			//we load it this way
+			
+			//this also marks the obs as dirty, so it must always be 
+			//saved via modifyObs when in EDIT mode, even if it wasn't changed,
+			//otherwise the dirty obs flag causes saveExistingObs to be called which voids
+			//(and thereby deletes the complex obs file)
+			//by not triggering the set of the dirty flag, saveObsNotDirty
+			//will be called in ObsServiceImpl.saveObs() instead
+			existingObs = Context.getObsService().getObs(existingObs.getId());
+		}
+		
+		//TODO move to static (or does it require autowiring?)
+		
+		//preloaded markup among all instances w/ a deep clone?
+		//(which over head is greater? clone or read from disk?)
+		svgWidgetTemplate = DrawingUtil.loadEditorMarkup(DrawingConstants.EDITOR_HTML_PATH);
 		
 	}
 	
 	@Override
 	public Collection<FormSubmissionError> validateSubmission(FormEntryContext context, HttpServletRequest submission) {
-		// TODO Auto-generated method stub
+		
+		if (required) {
+			//TODO required attr support design and impl.
+			//check that there are some elements like path, or that the submission
+			//differs from the original svgTemplate that was sent out in generateHtml
+			//hopefully neither the browser or frontend dev changed the DOM?
+		}
 		return null;
 	}
 	
 	@Override
 	public void handleSubmission(FormEntrySession session, HttpServletRequest submission) {
-		String encodedImage = submission.getParameter("encodedImage" + id);
-		if (!StringUtils.isNotBlank(encodedImage) && encodedImage.contains(","))
-			throw new RuntimeException("Image not encoded in proper format");
+		
+		String svgDOM = submission.getParameter("svgDOM");
+		
+		//only create a "new" obs if this parameter is posted
+		
+		//loaded complex data is a trigger for dirty obs
+		//due to the existing behavior of openmrs voiding
+		//when saving "dirty obs" this is required or openmrs deletes the file
+		
+		AnnotatedImage ai = null;
+		
+		if (svgDOM == null || StringUtils.isBlank(svgDOM)) {
+			
+			String markup = new String((byte[]) existingObs.getComplexData().getData());
+			
+			ai = new AnnotatedImage(markup);
+			
+		} else {
+			ai = new AnnotatedImage(svgDOM);
+		}
+		
+		if (ai.getParsingError() != DrawingUtil.ErrorStatus.NONE)
+			throw new RuntimeException("Error parsing the SVG document" + ai.getParsingError());
 		
 		try {
-			AnnotatedImage ai = new AnnotatedImage(DrawingUtil.base64ToImage(encodedImage));
-			ai.setAnnotations(DrawingUtil.getAnnotations(submission, id));
-			if (session.getContext().getMode() == Mode.EDIT && existingObs != null)
+			
+			byte[] svgByteArray = DrawingUtil.documentToString(ai.getImageDocument()).getBytes();
+			
+			//TODO verify this update pipeline works, and behaviors between
+			//both update pipelines match
+			if (session.getContext().getMode() == Mode.EDIT && existingObs != null) {
 				session.getSubmissionActions().modifyObs(existingObs, questionConcept,
-				    new ComplexData(existingObs.getComplexData().getTitle(), ai), null, null);
-			else
-				session.getSubmissionActions().createObs(questionConcept, new ComplexData("drawingObs.png", ai), null, null);
+				    new ComplexData(DrawingConstants.BASE_COMPLEX_OBS_FILENAME, svgByteArray), null, null);
+				
+				//should the modify codepath already handle setting previousObs?
+				Obs[] newObs = session.getSubmissionActions().getObsToCreate().parallelStream().filter(new Predicate<Obs>() {
+					
+					@Override
+					public boolean test(Obs curObsToCreate) {
+						if (curObsToCreate.isComplex() && curObsToCreate.getComplexData() != null
+						        && svgByteArray.equals((byte[]) curObsToCreate.getComplexData().getData())) {
+							return true;
+						}
+						
+						return false;
+					}
+					
+				}).toArray(Obs[]::new);
+				
+				newObs[0].setPreviousVersion(existingObs);
+				
+			} else {
+				session.getSubmissionActions().createObs(questionConcept,
+				    new ComplexData(DrawingConstants.BASE_COMPLEX_OBS_FILENAME, svgByteArray), null, null);
+			}
 			
 		}
 		catch (Exception e) {
 			log.error("cannot create obs :" + e.getMessage(), e);
 			throw new RuntimeException("Unable to save complex Observation!");
 		}
+		
+	}
+	
+	//add one or more classes to an element
+	private void addClasses(Element elem, String classes) {
+		String prevClasses = elem.getAttribute("class");
+		elem.setAttribute("class", prevClasses + " " + classes);
+	}
+	
+	private void hideElement(String id, Document doc) {
+		
+		Element elem = DrawingUtil.getElementById(id, doc);
+		
+		if (elem != null) {
+			addClasses(elem, "disabled hidden");
+		}
+		
 	}
 	
 	@Override
 	public String generateHtml(FormEntryContext context) {
-		StringBuilder sb = new StringBuilder();
 		
-		if (context.getMode().equals(Mode.VIEW) && existingObs != null) {
-			Obs complexObs = Context.getObsService().getComplexObs(existingObs.getId(), "");
-			AnnotatedImage ai = (AnnotatedImage) existingObs.getComplexData().getData();
-			String encodedImage = null;
-			try {
-				encodedImage = DrawingUtil.imageToBase64(ai.getImage());
-			}
-			catch (IOException e) {
-				log.error("unable to encode image to Base64 format", e);
-			}
-			sb.append("<link rel='stylesheet' media='screen' type='text/css' href='/" + WebConstants.WEBAPP_NAME
-			        + "/moduleResources/drawing/drawingHtmlForm.css' />");
-			sb.append("<script type='text/javascript'>var ancount"
-			        + id
-			        + "=0;    var redDot ='/openmrstru/moduleResources/drawing/red-dot.png';var close = '/openmrstru/moduleResources/drawing/close.gif';function createMarker"
-			        + id
-			        + "(identification, x, y, text, stat) {var annotationId = \"marker"
-			        + id
-			        + "\" + ancount"
-			        + id
-			        + ";ancount"
-			        + id
-			        + "++;var annDivData = \"<img src='\" + close + \"' style='float:right' onClick='$j(this).parent().parent().fadeOut(500)'/><span style='background-color:white'>\" + text + \"</span></br>\";var v = '<div class=\"container\"><div style=\"position:absolute;z-index:5;display:none\"><div id=\"' + annotationId + '_data\" class=\"divContainerDown\">' + annDivData + '</div><div class=\"calloutDown\"><div class=\"calloutDown2\"></div></div></div>';$j('#canvasDiv"
-			        + id
-			        + "').append(v + '<img id=\"' + annotationId + '\" src=\"' + redDot + '\" style=\"top:' + y + 'px;left:' + x + 'px;position:absolute;z-index:4\"/></div>');$j('#' + annotationId).click(function(event) {$j('#' + annotationId + '_data').parent().css('top', event.pageY-$j('#canvasDiv"
-			        + id
-			        + "').offset().top - $j('#' + annotationId + '_data').parent().height());$j('#' + annotationId + '_data').parent().css('left', event.pageX-$j('#canvasDiv"
-			        + id
-			        + "').offset().left - $j('#' + annotationId + '_data').parent().width() / 8 - 5);$j('#' + annotationId + '_data').parent().show();});}");
-			
-			sb.append("$j(document).ready(function(){");
-			for (ImageAnnotation annotation : ai.getAnnotations())
-				sb.append("createMarker" + id + "(" + annotation.getId() + "," + annotation.getLocation().getX() + ","
-				        + annotation.getLocation().getY() + ",'" + annotation.getText() + "','" + annotation.getStatus()
-				        + "');");
-			sb.append("})</script>");
-			sb.append("<h4>" + complexObs.getConcept().getName(Context.getLocale()).getName() + "</h4>");
-			sb.append("<div id='canvasDiv" + id + "' style='position:relative'><img  src='" + encodedImage + "'></div>");
-			
-			//sb.append(complexData.getData());
-		} else if (context.getMode() == Mode.EDIT || context.getMode() == Mode.ENTER) {
-			sb.append("<link rel='stylesheet' type='text/css' href='/" + WebConstants.WEBAPP_NAME
-			        + "/moduleResources/drawing/paint.css' />");
-			sb.append("<link rel='stylesheet' media='screen' type='text/css' href='/" + WebConstants.WEBAPP_NAME
-			        + "/moduleResources/drawing/colorpicker.css' />");
-			sb.append("<script type='text/javascript' src='/" + WebConstants.WEBAPP_NAME
-			        + "/moduleResources/drawing/paint.js'></script>");
-			sb.append("<script type='text/javascript' src='/" + WebConstants.WEBAPP_NAME
-			        + "/moduleResources/drawing/colorpicker.js'></script>");
-			sb.append("<script type='text/javascript'>$j(document).ready(function(){var v" + id + "=new DrawingEditor('"
-			        + id + "');v" + id + ".prepareCanvas();");
-			
-			if (context.getMode() == Mode.EDIT && existingObs != null && existingObs.isComplex()
-			        && existingObs.getComplexData() != null) {
-				AnnotatedImage ai = (AnnotatedImage) existingObs.getComplexData().getData();
-				
-				for (ImageAnnotation annotation : ai.getAnnotations())
-					sb.append("v" + id + ".createMarker(" + annotation.getId() + "," + annotation.getLocation().getX() + ","
-					        + annotation.getLocation().getY() + ",'" + annotation.getText() + "','" + annotation.getStatus()
-					        + "');");
-				String encodedImage = null;
-				try {
-					encodedImage = DrawingUtil.imageToBase64(ai.getImage());
-				}
-				catch (IOException e) {
-					log.error("unable to encode image to Base64 format", e);
-				}
-				if (StringUtils.isNotEmpty(encodedImage))
-					sb.append("v" + id + ".loadExistingImage('" + encodedImage + "');");
-				
-			}
-			
-			sb.append("v" + id + ".setSubmit(false);v" + id + ".setFormId('htmlform');}); </script>");
-			sb.append("<div class='editorContainer'>");
-			sb.append("<div id='drawingHeader'>");
-			sb.append("<div id='cursorDiv"
-			        + id
-			        + "' class='iconDiv tool' title='Cursor'><img id='cursor' src='/"+WebConstants.WEBAPP_NAME+"/moduleResources/drawing/images/cursor_icon.png' alt='cursor' class='imageprop' /></div>");
-			sb.append("<div id='doneMoving" + id
-			        + "' class='iconDiv' style='display:none;color:#000000;cursor: pointer'>Done Moving</div>");
-			sb.append("<div id='pencilDiv"
-			        + id
-			        + "' class='iconDiv tool' title='Pencil'><img id='pencil' src='/"+WebConstants.WEBAPP_NAME+"/moduleResources/drawing/images/pencil_icon.png' alt='pencil' class='imageprop' /></div>");
-			sb.append("<div id='eraserDiv"
-			        + id
-			        + "' class='iconDiv tool' title='Eraser'><img id='eraser' src='/"+WebConstants.WEBAPP_NAME+"/moduleResources/drawing/images/eraser_icon.png' alt='eraser' class='imageprop' /></div>");
-			sb.append("<div id='textDiv"
-			        + id
-			        + "' class='iconDiv tool' title='Text'><img id='text' src='/"+WebConstants.WEBAPP_NAME+"/moduleResources/drawing/images/text_icon.png' alt='text' class='imageprop' /></div>");
-			sb.append("<div id='fontpropertiesDiv" + id
-			        + "' class='tool dependendTool' style='display: none;float: left;margin-left: 5px' >");
-			sb.append("<div id='boldDiv"
-			        + id
-			        + "' class='iconDiv' title='Bold'><img src='/"+WebConstants.WEBAPP_NAME+"/moduleResources/drawing/images/bold_icon.png' alt='bold' class='imageprop' /></div>");
-			sb.append("<div id='italicDiv"
-			        + id
-			        + "' class='iconDiv' title='Italic'><img src='/"+WebConstants.WEBAPP_NAME+"/moduleResources/drawing/images/italic_icon.png' alt='italic'  class='imageprop'/></div>");
-			sb.append("<div class='selection' >");
-			sb.append("<div style='float:left'>Font Size:</div><div id='fontSlider" + id
-			        + "' style='width:100px;float:right'></div>");
-			sb.append("</div>");
-			sb.append("</div>");
-			sb.append("<div id='thicknessDiv" + id
-			        + "' class='tool dependendTool' style='display: none;float: left;margin-left: 5px' >");
-			sb.append("<div class='selection'>");
-			sb.append("<div style='float:left'>Thickness:</div><div id='thicknessSlider" + id
-			        + "' style='width:100px;float:right'></div>");
-			sb.append("</div>");
-			sb.append("</div>");
-			sb.append("<div id='annotationsVisibility"+id+"' class='iconDiv' style='color:#000000;cursor: pointer'>Hide Annotations</div>");
-			sb.append("<div id='undoDiv"
-			        + id
-			        + "' class='iconDiv tool' title='Undo'><img id='undo' src='/"+WebConstants.WEBAPP_NAME+"/moduleResources/drawing/images/undo_icon.png' alt='undo' class='imageprop' /></div>");
-			sb.append("<div id='redoDiv"
-			        + id
-			        + "'class='iconDiv tool' title='Redo'><img id='redo' src='/"+WebConstants.WEBAPP_NAME+"/moduleResources/drawing/images/redo_icon.png' alt='redo' class='imageprop' /></div>");
-			sb.append("<div id='undoRedoRateDiv' class='tool selection' style='float: left;margin-left: 5px;' title='This allows you to set the number of moves you want to undo/redo'>");
-			sb.append("Undo/Redo Rate:<select id='undoRedoRate"
-			        + id
-			        + "'><option>1x</option><option>3x</option><option>5x</option><option>10x</option><option>20x</option></select>");
-			sb.append("</div>");
-			sb.append("<div id='colorSelector" + id + "'  style='float: left' class='colorselector tool' title='Color Picker'>");
-			sb.append("<div class='colorselector_innerdiv'></div>");
-			sb.append("</div>");
-			sb.append("<div style='clear:both;'></div>");
-			
-			sb.append("</div>");
-			sb.append("<div id='canvasDiv" + id + "' class='canvasDiv'>");
-			
-			sb.append("</div>");
-			sb.append("<div id='templatesDialog" + id + "' title='Templates' style='display:none;position:relative'>");
-			String[] encodedTemplateNames = DrawingUtil.getAllTemplateNames();
-			if (encodedTemplateNames.length > 0) {
-				sb.append("<div style='position:relative'>");
-				sb.append("<div style='width:30%;height:100%;float:left;border:1px;;margin-bottom:10px'>");
-				sb.append("<b class='boxHeader'>Available Templates</b>");
-				sb.append("<div class='box' style='height:350px'>");
-				sb.append("Search:<input type='search' id='searchTemplates' placeholder='search...'/>");
-				sb.append("<div style='overflow-y: scroll;overflow-x:hidden;height:315px'>");
-				sb.append("<table>");
-				for (String encodedTemplateName : encodedTemplateNames) {
-					sb.append("<tr>");
-					sb.append("<td style='display:list-item;list-style:disc inside;'></td>");
-					sb.append("<td class='templateName' style='cursor:pointer'>"+encodedTemplateName+"</td>");
-					sb.append("</tr>");
-				}
-				sb.append("</table>");
-				sb.append("</div>");
-				sb.append("</div>");
-				sb.append("</div>");
-				sb.append("<div style='float:left;width:68%;margin-left:10px;margin-bottom:10px' >");
-				sb.append("<b class='boxHeader'>Preview</b>");
-				sb.append("<div class='box' style='height:350px'>");
-				sb.append("<img  src='/"+WebConstants.WEBAPP_NAME+"/moduleResources/drawing/images/preview.png' id='templateImage"+id+"' class='templateImage'/>");
-				
-				sb.append("</div>");
-				sb.append("</div>");
-				
-				sb.append("</div>");
-				sb.append("<div style='clear:both'></div>");
-			} else {
-				sb.append("No Templates Uploaded");
-			}
-			sb.append("</div>");
-			sb.append("<div id='textAreaPopUp" + id + "' style='position:absolute;display:none;z-index:1;'>");
-			sb.append("<textarea id='writableTextarea" + id + "' style='width:100px;height:50px;'></textarea>");
-			sb.append("<input type='button' value='save' id='saveText" + id + "'/>");
-			sb.append("</div>");
-			sb.append("<div id='drawingFooter'>");
-			sb.append("<div class='tool'>");
-			sb.append("<input type='button' id='clearCanvas" + id + "' value='Clear Canvas' />");
-			sb.append("<input type='button' id='showTemplates" + id + "' value='Show Templates'/>");
-			sb.append("<input type='button' id='saveImage" + id + "' value='Done Drawing' />");
-			sb.append("<input type='file' id='imageUpload" + id + "' value='Open Image' /> ");
-			sb.append("<input type='hidden' id='encodedImage"+id+"' name='encodedImage"+id+"'>");
-			sb.append("<span id='saveNotification" + id
-			        + "' style='display:none;color:#ffffff;float:right'>DRAWING SAVED</span>");
-			sb.append("</div>");
-			sb.append("</div>");
-			sb.append("</div>");
+		String css = "<link rel=\"stylesheet\" href=\"../../moduleResources/drawing/style.css\"/>";
+		
+		//TODO for now, during testing if the file can't be loaded, return early
+		if (svgWidgetTemplate == null) {
+			return "";
 		}
-		return sb.toString();
+		
+		//always hide save button when using editor in HFE forms, the submit button will
+		//be provided
+		hideElement("save-image", svgWidgetTemplate);
+		
+		//exclude any other explicitly excluded buttons by html id attr
+		if (excludedButtonIds != null) {
+			for (String id : excludedButtonIds) {
+				hideElement(id, svgWidgetTemplate);
+			}
+		}
+		
+		if (svgWidgetTemplate != null) {
+			Element rootSvg = DrawingUtil.getElementById("root-svg", svgWidgetTemplate);
+			
+			//TODO patch up widgetTemplate using DOM methods
+			//1. make all ids (hopefully) unique (html form entry unique id?)
+			//2. handle different classes (e.g. signature vs. annotated image)
+			
+			Mode ctxMode = context.getMode();
+			
+			//TODO add translated messages, parse HTML/XML template or provide
+			//to JS?
+			DrawingUtil.translateLanguageKey("drawing.save");
+			
+			//in both view and edit, load the existing svg if it exists
+			if ((ctxMode == Mode.VIEW || ctxMode == Mode.EDIT) && existingObs != null) {
+				
+				AnnotatedImage ai = (AnnotatedImage) new AnnotatedImage(
+				        new String((byte[]) existingObs.getComplexData().getData()));
+				
+				//TODO after SVG DOM insertion is implemented, handle this section appropriately
+				Document svgDoc = ai.getImageDocument();
+				
+				Node storedSvg = svgDoc.getFirstChild();
+				storedSvg = svgWidgetTemplate.importNode(storedSvg, true);
+				rootSvg.getParentNode().replaceChild(storedSvg, rootSvg);
+				rootSvg = (Element) storedSvg;
+				
+				//in view mode, disable interaction
+				if (ctxMode == Mode.VIEW) {
+					//set disabled on all buttons
+					
+					//set css pointer-events to none on root-svg
+					String rootClasses = rootSvg.getAttribute("class");
+					rootSvg.setAttribute("class", rootClasses + " disabledPointerEvents");
+					
+					NodeList buttons = svgWidgetTemplate.getElementsByTagName("button");
+					//Element clearAllButton = svgWidgetTemplate.getElementById("");
+					
+					for (int i = 0; i < buttons.getLength(); i++) {
+						
+						Element button = (Element) buttons.item(i);
+						
+						addClasses(button, "hidden");
+						
+					}
+					
+					//hide layers
+					Element layerArrangeDiv = DrawingUtil.getElementById("arrange", svgWidgetTemplate);
+					
+					String buttonClasses = layerArrangeDiv.getAttribute("class");
+					layerArrangeDiv.setAttribute("class", buttonClasses + " hidden");
+					
+				}
+				
+			} else if (ctxMode == Mode.ENTER) {
+				
+				//the image only needs to be added if this is a new form being entered
+				if (base64preload != null) {
+					//add new child <image> to root-svg
+					Element imageNode = svgWidgetTemplate.createElement("image");
+					
+					imageNode.setAttribute("href", base64preload);
+					rootSvg.appendChild(imageNode);
+				}
+				
+			}
+			
+			//these elements will be used to set explicit heights or visibility for
+			//different purposes
+			Element parentDiv = DrawingUtil.getElementById("view-layer-parent", svgWidgetTemplate);
+			Element layerParentDiv = DrawingUtil.getElementById("layer-list-div", svgWidgetTemplate);
+			Element layerArrangeDiv = DrawingUtil.getElementById("arrange", svgWidgetTemplate);
+			
+			switch (instancePurpose) {
+				case Annotation:
+					//populate templates
+					/*
+					String[] encodedTemplateNames = DrawingUtil.getAllTemplateNames();
+					if (encodedTemplateNames.length > 0) {
+						sb.append("<div style='position:relative'>");
+						sb.append("<div style='width:30%;height:100%;float:left;border:1px;;margin-bottom:10px'>");
+						sb.append("<b class='boxHeader'>"+mss.getMessage("drawing.availableTemplates")+"</b>");
+						sb.append("<div class='box' style='height:350px'>");
+						sb.append(mss.getMessage("uicommons.search")+":<input type='search' id='searchTemplates' placeholder='search...'/>");
+						sb.append("<div style='overflow-y: scroll;overflow-x:hidden;height:315px'>");
+						sb.append("<table>");
+						for (String encodedTemplateName : encodedTemplateNames) {
+							sb.append("<tr>");
+							sb.append("<td style='display:list-item;list-style:disc inside;'></td>");
+							sb.append("<td class='templateName' style='cursor:pointer'>"
+									+ encodedTemplateName + "</td>");
+							sb.append("</tr>");
+						}
+						sb.append("</table>");
+						sb.append("</div>");
+						sb.append("</div>");
+						sb.append("</div>");
+						sb.append("<div style='float:left;width:68%;margin-left:10px;margin-bottom:10px' >");
+						sb.append("<b class='boxHeader'>"+mss.getMessage("drawing.preview")+"</b>");
+						sb.append("<div class='box' style='height:350px'>");
+						sb.append("<img  src='/"
+								+ WebConstants.WEBAPP_NAME
+								+ "/moduleResources/drawing/images/preview.png' id='templateImage"
+								+ id + "' class='templateImage'/>");
+					
+						sb.append("</div>");
+						sb.append("</div>");
+					
+						sb.append("</div>");
+						sb.append("<div style='clear:both'></div>");
+					} else {
+						sb.append(mss.getMessage("drawing.noTemplatesUploaded"));
+					}
+					*/
+					
+					break;
+				
+				case Signature:
+					//hide all buttons except clear all
+					NodeList buttons = svgWidgetTemplate.getElementsByTagName("button");
+					//Element clearAllButton = svgWidgetTemplate.getElementById("");
+					
+					for (int i = 0; i < buttons.getLength(); i++) {
+						
+						Element button = (Element) buttons.item(i);
+						
+						if (button.getAttribute("id").equals("clear-all")) {
+							//skip setting display:none
+							continue;
+						}
+						
+						addClasses(button, "hidden");
+						
+					}
+					
+					String buttonClasses = layerArrangeDiv.getAttribute("class");
+					layerArrangeDiv.setAttribute("class", buttonClasses + " hidden");
+					
+					break;
+				
+				default:
+					throw new RuntimeException("Invalid <drawing> displayMode");
+			}
+			
+			Element[] fixedHeightDivs = { parentDiv, layerParentDiv, layerArrangeDiv };
+			css += "<style>";
+			for (Element elem : fixedHeightDivs) {
+				
+				if (elem != null) {
+					String elemCss = "#" + elem.getAttribute("id") + " {";
+					
+					if (elem == parentDiv && fixedWidth != null) {
+						elemCss += "width:" + fixedWidth + ";";
+					}
+					
+					if (fixedHeight != null) {
+						elemCss += "height:" + fixedHeight + ";";
+					}
+					
+					css += elemCss + "}";
+				}
+			}
+			css += "</style>";
+			
+		}
+		
+		//add a hidden input to provide the SVG on submission
+		
+		//<input type="hidden" id="svgDOM" name="svgDOM" value="${svgDOM}"/>
+		Element svgDomInput = svgWidgetTemplate.createElement("input");
+		svgDomInput.setAttribute("name", "svgDOM");
+		svgDomInput.setAttribute("id", "svgDOM");
+		svgDomInput.setAttribute("type", "hidden");
+		
+		//since the DOM is manipulated directly when generating HTML here,
+		//in this case the value is "" 
+		svgDomInput.setAttribute("value", "");
+		
+		svgDomInput.appendChild(svgWidgetTemplate.createComment("expand tag for valid xml"));
+		
+		svgWidgetTemplate.getFirstChild().appendChild(svgDomInput);
+		
+		String widgetMarkup = DrawingUtil.bodyChildrenToString(svgWidgetTemplate);
+		
+		if (widgetMarkup == null || widgetMarkup.isEmpty()) {
+			widgetMarkup = "<span style='color:red;'>Error loading drawing element</span>";
+		}
+		
+		//TODO use "correct" method to build the path to these js resources
+		String js = "<script src=\"../../moduleResources/drawing/svg.js\"></script>"
+		        + "<script src=\"../../moduleResources/drawing/svg.draw.js\"></script>"
+		        + "<script src=\"../../moduleResources/drawing/ui.js\"></script>";
+		
+		return css + widgetMarkup + js;
 	}
 	
 }

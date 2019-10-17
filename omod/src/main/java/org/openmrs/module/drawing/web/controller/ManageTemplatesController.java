@@ -41,7 +41,6 @@ import org.springframework.web.multipart.MultipartFile;
 public class ManageTemplatesController {
 	
 	protected final Log log = LogFactory.getLog(getClass());
-	 
 	
 	@RequestMapping(value = "/module/drawing/manageTemplates", method = RequestMethod.GET)
 	public void manage(ModelMap model) {
@@ -50,11 +49,10 @@ public class ManageTemplatesController {
 	
 	@RequestMapping(value = "/module/drawing/manageTemplates", method = RequestMethod.POST)
 	public void manage(@RequestParam(value = "templateName", required = false) String templateName,
-	                   @RequestParam(value = "template", required = true) MultipartFile file, ModelMap model,
-	                   HttpSession session) {
+	        @RequestParam(value = "template", required = true) MultipartFile file, ModelMap model, HttpSession session) {
 		
 		model.addAttribute("encodedTemplateNames", DrawingUtil.getAllTemplateNames());
-		if (file == null || file.getSize()==0) {
+		if (file == null || file.getSize() == 0) {
 			session.setAttribute(WebConstants.OPENMRS_ERROR_ATTR, "Please Fill All The Fields");
 			return;
 		} else if (!DrawingUtil.isImage(file.getOriginalFilename())) {
@@ -64,16 +62,16 @@ public class ManageTemplatesController {
 		if (StringUtils.isBlank(templateName))
 			templateName = file.getOriginalFilename();
 		else
-			templateName = templateName +"."+ DrawingUtil.getExtension(file.getOriginalFilename());
+			templateName = templateName + "." + DrawingUtil.getExtension(file.getOriginalFilename());
 		
 		try {
 			BufferedImage bi = ImageIO.read(new ByteArrayInputStream(file.getBytes()));
 			Boolean saved = DrawingUtil.saveFile(templateName, bi);
-			if (saved){
+			if (saved) {
 				session.setAttribute(WebConstants.OPENMRS_MSG_ATTR, "Template Saved");
 				model.addAttribute("encodedTemplateNames", DrawingUtil.getAllTemplateNames());
-
-			}else
+				
+			} else
 				session.setAttribute(WebConstants.OPENMRS_ERROR_ATTR, "Error Saving Template");
 			
 		}
@@ -85,23 +83,22 @@ public class ManageTemplatesController {
 	}
 	
 	@RequestMapping(value = "/module/drawing/getTemplate", method = RequestMethod.POST)
-	public @ResponseBody
-	String getTemplate(@RequestParam(value="templateName",required=true)String templateName) {
-		String encodedImage=null;
+	public @ResponseBody String getTemplate(@RequestParam(value = "templateName", required = true) String templateName) {
+		String encodedImage = null;
 		try {
-	         encodedImage= DrawingUtil.getTemplateAsBase64ByName(StringEscapeUtils.unescapeHtml(templateName));
-        }
-        catch (IOException e) {
-	        log.error("unable to get the file", e);
-        }
+			encodedImage = DrawingUtil.getTemplateAsBase64ByName(StringEscapeUtils.unescapeHtml(templateName));
+		}
+		catch (IOException e) {
+			log.error("unable to get the file", e);
+		}
 		
 		return encodedImage;
 		
 	}
+	
 	@RequestMapping(value = "/module/drawing/deleteTemplate", method = RequestMethod.POST)
-	public @ResponseBody
-	void deleteTemplate(@RequestParam(value="templateName",required=true)String templateName) {
-	       DrawingUtil.deleteTemplate(StringEscapeUtils.unescapeHtml(templateName));
+	public @ResponseBody void deleteTemplate(@RequestParam(value = "templateName", required = true) String templateName) {
+		DrawingUtil.deleteTemplate(StringEscapeUtils.unescapeHtml(templateName));
 	}
 	
 }

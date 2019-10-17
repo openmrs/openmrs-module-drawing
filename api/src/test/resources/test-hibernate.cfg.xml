@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE hibernate-configuration PUBLIC
+        "-//Hibernate/Hibernate Configuration DTD 3.0//EN"
+        "http://hibernate.sourceforge.net/hibernate-configuration-3.0.dtd">
+
+<hibernate-configuration>
+    <session-factory>
+<!--
+https://wiki.openmrs.org/display/docs/Integration+Testing+with+a+Database
+When testing with tables defined by your module, you must have test-hibernate.cfg.xml 
+in your [api/omod]:src/test/resources folder and it must specify all the tables your
+ module defines or uses that are not core openmrs tables. 
+ (The mapping tables included in your module should also be specified in 
+ omod:src/main/resources:config.xml.) If you do not do this, you will get
+  "table does not exist" errors for your module tables.
+-->
+    </session-factory>
+</hibernate-configuration>

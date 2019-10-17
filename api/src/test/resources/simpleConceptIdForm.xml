@@ -1,0 +1,6 @@
+<htmlform formVersion="1.0">
+	Date: <encounterDate/>
+	Location: <encounterLocation/>
+	Provider: <encounterProvider role="Provider"/>
+	Drawing: <drawing id="drawingEditorTag" conceptId="17d7503a-e705-49af-b0f6-b0b567716860"/>
+</htmlform>

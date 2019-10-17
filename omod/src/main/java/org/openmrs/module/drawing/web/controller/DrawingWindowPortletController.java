@@ -22,7 +22,6 @@ import org.apache.commons.logging.LogFactory;
 import org.openmrs.module.drawing.DrawingUtil;
 import org.openmrs.web.controller.PortletController;
 
-
 /**
  *
  */
@@ -36,7 +35,6 @@ public class DrawingWindowPortletController extends PortletController {
 			log.debug("In DrawingWindowPortletController...");
 		
 		model.put("encodedTemplateNames", DrawingUtil.getAllTemplateNames());
-
 		
 	}
 }

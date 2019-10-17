@@ -1,0 +1,97 @@
+<div>
+<div id="textarea-popup" data-mode="create">
+	    <textarea id="annotation-text" wrap="off"></textarea>
+	    <div>
+	        <button id="annotation-save" type="button" onclick="createText();"><i class="material-icons">save</i></button>
+	        <button id="annotation-cancel" type="button" onclick="resetTextarea();"><i class="material-icons">cancel</i></button>
+	    </div>
+	</div>
+	
+	<div id="template-image-popup" style="position: absolute; display: none;" data-mode="create">
+	    <div id="template-image-list">
+	
+	    </div>
+	    <div id="template-image-preview">
+<!--	        <img id="template-image" src=""></img>-->
+	    </div>
+	</div>
+	
+	<!-- cursor icon -->
+	<svg style="display:none;" viewbox="0 0 .1 .1"><g><path stroke="black" stroke-width="3" id="cursor-svg" d="M52.982,63.626L32.084,42.729L19.151,62.087L0.374,0.374l61.704,18.775L42.775,32.132l20.852,20.849L52.982,63.626z    M31.791,39.761L52.982,60.95l7.969-7.969L39.813,31.845L57.719,19.8L3.217,3.218l16.58,54.494L31.791,39.761z"/></g></svg>
+	
+	<div id="toolbar">
+		<button id="select-tool" width="24px" height="24px" type="button" onclick="setSelectTool(event);">
+			<svg width="24px" height="24px" viewbox="0 0 65 65"><use href="#cursor-svg"/></svg>
+		</button>
+		<button id="text-tool"  type="button" onclick="setTextTool(event);"><i class="material-icons">format_shapes</i></button>
+		<button id="template-button" type="button" onclick="selectTemplate(event);"><i class="material-icons">image</i></button>
+		<button id="load-image-button" type="button" onclick="document.getElementById('load-image-file-input').click();"><i class="material-icons">file_upload</i><i class="material-icons">image</i></button>
+		<button id="path-tool" type="button" onclick="setPathTool();"><i class="material-icons">gesture</i></button>
+		<button id="line-tool"  type="button" onclick="setLineTool();"><i class="material-icons">border_color</i></button>
+		<button id="circle-tool" type="button" onclick="setCircleTool();"><i class="material-icons">panorama_fish_eye</i></button>
+		<button id="save-image" type="button" onclick="submitSave();"><i class="material-icons">save</i></button>
+		<button id="clear-all" type="button" onclick="clearAll();"><i class="material-icons">delete_sweep</i></button>
+		<button id="layer-info-vis-toggle" type="button" onclick="toggleLayerInfoVis();"><i class="material-icons">layers</i></button>
+	</div>
+	
+	<input id="load-image-file-input" type="file" class="hidden"><!--comment preserves valid xml--></input>
+	
+	<div class="view-layer-parent">
+		
+	  <div id="svg-container-div" class="view-div">
+	    <svg id="root-svg" xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink">
+		  <rect id="background" width="100%" height="100%" fill="white"/>
+	      <filter id="dropshadow" height="130%">
+	          <feGaussianBlur in="SourceAlpha" stdDeviation="3"/> <!-- stdDeviation is how much to blur -->
+	        <!-- <feComponentTransfer>
+	        <feFuncR type="linear" slope=".01" intercept="1"/>
+	        <feFuncG type="linear" slope="0" intercept="0"/>
+	        <feFuncB type="linear" slope="0" intercept="0"/>
+	        <feFuncA type="linear" slope="0" intercept="1"/>
+	        </feComponentTransfer>  -->
+	        
+	          <feComponentTransfer>
+	            <feFuncA type="linear" slope="0.8"/> <!-- slope is the opacity of the shadow -->
+	          </feComponentTransfer>
+	          <feMerge> 
+	            <feMergeNode/> <!-- this contains the offset blurred image -->
+	            <feMergeNode in="SourceGraphic"/> <!-- this contains the element that the filter is applied to -->
+	          </feMerge>
+	        </filter>
+	    </svg>
+	  </div>
+	  <div id="arrange" class="layer-div">
+	    <div id="layer-list-div">
+	      <table id="layer-list">
+	        <thead>
+	          <tr>
+	            <th>Sel</th>
+	            <th>Vis</th>
+	            <th>Type</th>
+	            <th>Content</th>
+	          </tr>
+	        </thead>
+	        <tbody id="layer-list-rows">
+	          <tr>
+	            <td><input type="checkbox" class="disabled"><!--comment preserves xml compatibility--></input></td>
+	            <td><button type="button" class="disabled"><i class="material-icons">visibility</i></button></td>
+	            <td>Root</td>
+	            <td><svg width="100%" height="100%" viewbox="0 0 10 10"><use href="#svg-root"/></svg></td>
+	          </tr>
+	        </tbody>
+	      </table>
+	    </div>
+	    <div id="layer-button-div">
+	        <button id="edit-tool" type="button" class="vert-button layer-button disabled" onclick="setEditTool();"><i class="material-icons">edit</i></button>
+	        <!-- fieldset doesnt respect flexbox styling, affecting every button is a little tedious, but necessary -->
+	        <button id="move-tool" type="button" class="vert-button layer-button disabled" onclick="setMoveTool();"><i class="material-icons">open_with</i></button>
+	        <button id="send-to-front-tool" type="button" class="vert-button layer-button disabled" onclick="setSendFrontTool();"><i class="material-icons">flip_to_front</i></button>
+	        <button id="move-forward-tool" type="button" class="vert-button layer-button disabled" onclick="setForwardTool();"><i class="material-icons">arrow_upward</i></button>
+	        <button id="move-backward-tool" type="button" class="vert-button layer-button disabled" onclick="setBackwardTool();"><i class="material-icons">arrow_downward</i></button>
+	        <button id="send-to-back-tool" type="button" class="vert-button layer-button disabled" onclick="setSendBackTool();"><i class="material-icons">flip_to_back</i></button>
+	        <button id="void-tool" type="button" class="vert-button layer-button disabled" onclick="setVoidTool();"><i class="material-icons">delete</i></button>
+	        <button id="delete-tool" type="button" class="vert-button layer-button disabled" onclick="setDeleteTool();"><i class="material-icons">delete_forever</i></button>
+	    </div>
+	  </div>
+	</div>
+</div>

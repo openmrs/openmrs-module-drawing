@@ -1,12 +1,101 @@
-.classpath
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+### IntelliJ Idea ###
+*.iml
+*.ipr
+*.iws
+.idea/
+
+### Maven ###
+target/
+#############
+
+### Eclipse ###
+*.pydevproject
 .project
-.settings/*
-api/.classpath
-api/.project
-api/.settings/*
-api/target/*
-omod/.classpath
-omod/.project
-omod/.settings/*
-omod/target/*
-/.settings
+.metadata
+bin/**
+tmp/**
+tmp/**/*
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.classpath
+.settings/
+.loadpath
+
+# External tool builders
+.externalToolBuilders/
+
+# Locally stored "Eclipse launch configurations"
+*.launch
+
+# CDT-specific
+.cproject
+
+# PDT-specific
+.buildpath
+###############
+
+### Java ###
+*.class
+
+# Java Package Files #
+*.jar
+*.war
+*.ear
+############
+
+### Netbeans ###
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+nbactions.xml
+nb-configuration.xml
+################
+
+##### VIM ######
+# Swap
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+# Session
+Session.vim
+Sessionx.vim
+
+# Temporary
+.netrwhist
+*~
+# Auto-generated tag files
+tags
+# Persistent undo
+[._]*.un~
+#############
+
+### Linux ###
+.*
+!.gitignore
+!.gitattributes
+!.travis.yml
+*~
+#############
+
+### OpenMRS Files ###
+/webapp/activemq-data
+/webapp/src/main/webapp/WEB-INF/tags/module
+/webapp/src/main/webapp/WEB-INF/dwr-modules.xml
+/webapp/src/main/webapp/WEB-INF/module_messages*
+#############
+
+!omod/src/main/webapp/resources/js/swagger-ui/*

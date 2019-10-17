@@ -17,6 +17,7 @@ import java.io.IOException;
 
 import javax.servlet.http.HttpServletRequest;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -42,20 +43,23 @@ public class DrawingManageController {
 		
 		if (StringUtils.isNotBlank(request.getParameter("obsId"))) {
 			int obsId = Integer.parseInt(request.getParameter("obsId"));
-			Obs obs = Context.getObsService().getComplexObs(obsId, "");
+			Obs obs = Context.getObsService().getObs(obsId);
 			if (obs == null || !obs.getConcept().isComplex()) {
 				log.error("obs is not complex ");
 			} else {
-				AnnotatedImage ai = (AnnotatedImage) obs.getComplexData().getData();
-				String encodedImage;
-				try {
-					encodedImage = DrawingUtil.imageToBase64(ai.getImage());
-					model.addAttribute("encodedImage", encodedImage);
-				}
-				catch (IOException e) {
-					log.error("Error generated", e);
-				}
-				model.addAttribute("annotations", ai.getAnnotations());
+				
+				AnnotatedImage ai = new AnnotatedImage(new String((byte[]) obs.getComplexData().getData()));
+				
+				//TODO for TFS-145140, pull most recent annotation text from db here
+				
+				String svgMarkup = DrawingUtil.documentToString(ai.getImageDocument());
+				
+				svgMarkup = StringEscapeUtils.escapeHtml(svgMarkup);
+				
+				model.addAttribute("svgDOM", svgMarkup);
+				
+				//TODO Does this need to provide a way to access annotations separately?
+				//model.addAttribute("annotations", ai.getAnnotations());
 				model.addAttribute("obsId", obs.getId());
 				
 			}

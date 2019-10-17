@@ -21,7 +21,7 @@ import org.openmrs.module.web.extension.AdministrationSectionExt;
 
 /**
  * This class defines the links that will appear on the administration page under the
- * "drawing.title" heading. 
+ * "drawing.title" heading.
  */
 public class AdminList extends AdministrationSectionExt {
 	
@@ -45,7 +45,7 @@ public class AdminList extends AdministrationSectionExt {
 	public Map<String, String> getLinks() {
 		LinkedHashMap<String, String> map = new LinkedHashMap<String, String>();
 		map.put("/module/drawing/manage.form", "drawing.manage");
-		map.put("/module/drawing/manageTemplates.form","drawing.manageTemplates");
+		map.put("/module/drawing/manageTemplates.form", "drawing.manageTemplates");
 		return map;
 	}
 	

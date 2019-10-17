@@ -1,0 +1,184 @@
+svg circle:hover {
+	filter: url(#dropshadow);
+}
+
+@font-face {
+    font-family: 'Material Icons';
+    font-style: normal;
+    font-weight: 400;
+    src: url(MaterialIcons-Regular.eot); /* For IE6-8 */
+    src: local('Material Icons'),
+      local('MaterialIcons-Regular'),
+      url(MaterialIcons-Regular.woff2) format('woff2'),
+      url(MaterialIcons-Regular.woff) format('woff'),
+      url(MaterialIcons-Regular.ttf) format('truetype');
+}
+
+.material-icons {
+    font-family: 'Material Icons';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;  /* Preferred icon size */
+    display: inline-block;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+  
+    /* Support for all WebKit browsers. */
+    -webkit-font-smoothing: antialiased;
+    /* Support for Safari and Chrome. */
+    text-rendering: optimizeLegibility;
+  
+    /* Support for Firefox. */
+    -moz-osx-font-smoothing: grayscale;
+  
+    /* Support for IE. */
+    font-feature-settings: 'liga';
+  }
+
+#root-svg {
+    
+}
+
+[aria-pressed="true"] {
+    background-color: #ccc;
+    box-shadow: inset 0 0 0 0.15rem #ccc, 
+                inset 0.25em 0.25em 0 #aaa;
+}
+/**
+ * Marching ants border
+ */
+ 
+@keyframes ants { to { stroke-dashoffset: 0; } }
+
+.selectedElement {
+    stroke-width: 1px;
+    stroke-dasharray: 4px;
+    stroke-dashoffset: 8px;
+    animation: ants 0.2s linear infinite;
+}
+
+.view-layer-parent {
+    display: flex;
+}
+
+.view-div {
+    border: solid black .1em;
+    padding-right: .5em;
+    overflow: scroll;
+    width: 100%;
+}
+
+.layer-div {
+    display: inline-flex;
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+
+#layer-list-div {
+    padding-right: .5em;
+    overflow-y: scroll;
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+
+#arrange {
+	opacity: 0;
+	transition: opacity .2s linear;
+}
+
+#arrange table {
+    border-collapse: collapse;
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+
+#arrange thead {
+    border: .1em solid black;
+}
+
+#arrange tbody {
+    border: .1em solid black;
+}
+
+#arrange tr {
+    height: 1em;
+    flex: 0;
+}
+
+#arrange tbody tr:nth-child(odd){
+    background-color: lightgrey;
+}
+
+#arrange td {
+    border: .1em solid black;
+}
+
+#layer-button-div {
+    display: flex;
+    justify-content: space-evenly;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.vert-button {
+    display: flex;
+    flex:1;
+}
+
+.move {
+    cursor: move;
+}
+
+.svgTextUnselectable {
+    pointer-events: none;
+}
+
+.disabledPointerEvents {
+    pointer-events: none;
+}
+
+.disabled {
+    pointer-events: none;
+    color: grey;
+}
+
+.hidden {
+	display: none;
+}
+
+#template-image-popup {
+    display: flex;
+    height: 75%;
+    width: 75%;
+}
+
+#template-image-list {
+    flex: 1;
+    overflow-y: scroll;
+}
+
+#template-image-preview {
+    flex: 2;
+}
+
+
+#arrange.reveal {
+	opacity: 1;
+}
+
+#textarea-popup {
+	position: fixed;
+	display: none; 
+	background-color: #FFF;
+	border: .125em solid black;
+	border-radius: .5em;
+	padding: .5em;
+}
+
+#textarea-popup #annotation-text {
+	font-size: 1em;
+}

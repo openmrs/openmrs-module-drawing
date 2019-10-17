@@ -17,12 +17,29 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Date;
+import java.io.InputStream;
+import java.io.StringWriter;
+import java.io.UnsupportedEncodingException;
+import java.util.Scanner;
 
 import javax.imageio.ImageIO;
-import javax.servlet.http.HttpServletRequest;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.TransformerFactoryConfigurationError;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.FileUtils;
@@ -30,33 +47,237 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.api.context.Context;
+import org.openmrs.messagesource.MessageSourceService;
+import org.openmrs.module.ModuleClassLoader;
+import org.openmrs.module.ModuleFactory;
 import org.openmrs.util.OpenmrsClassLoader;
 import org.openmrs.util.OpenmrsUtil;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
 
 /**
- *  Drawing utility methods
+ * Drawing utility methods
  */
 public class DrawingUtil {
 	
+	private static MessageSourceService mss = Context.getMessageSourceService();
+	
 	private static Log log = LogFactory.getLog(DrawingUtil.class);
 	
+	public enum ErrorStatus {
+		NONE,
+		INTERNAL_ERROR,
+		FILE_ERROR,
+		FORMAT_ERROR,
+		NULL_DOC
+	};
 	
-	/** 
-	 *  @param an image
-	 *  @return String containing Base64 encoded image/null if there is a problem in encoding
-	 *  @throws IOException
+	/**
+	 * @param an image
+	 * @return String containing Base64 encoded image/null if there is a problem in encoding
+	 * @throws IOException
 	 */
 	public static String imageToBase64(BufferedImage img) throws IOException {
 		
 		return imageToBase64(img, null);
 	}
 	
+	public static String loadResourceServerside(String path) throws FileNotFoundException {
+		File doc = new File(path);
+		Scanner reader;
+		String markup = "";
+		
+		reader = new Scanner(doc);
+		
+		//read the entire file
+		reader.useDelimiter("\\Z");
+		markup = reader.next();
+		
+		reader.close();
+		
+		return markup;
+	}
+	
+	public static Element getElementById(String id, Document doc) {
+		XPath path = XPathFactory.newInstance().newXPath();
+		
+		Element elem = null;
+		//should only be one with given id
+		try {
+			elem = (Element) path.evaluate("//*[@id='" + id + "']", doc, XPathConstants.NODE);
+		}
+		catch (XPathExpressionException e) {
+			e.printStackTrace();
+		}
+		
+		return elem;
+	}
+	
+	public static Document loadEditorMarkup(String path) throws ParserConfigurationException, SAXException, IOException {
+		
+		String markup = loadResourceServerside(path);
+		
+		//if the resource isnt found the markup string is ""
+		if (markup.equals("")) {
+			return null;
+		}
+		
+		//wrap in a single root tag for builder parsing
+		markup = "<body>" + markup + "</body>";
+		
+		//provide an interface builder.parse can read from
+		InputStream markupIS = null;
+		
+		markupIS = new ByteArrayInputStream(markup.getBytes("UTF-8"));
+		
+		Document parsedDoc = null;
+		
+		if (markupIS != null) {
+			
+			DocumentBuilder builder = null;
+			
+			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+			builder = factory.newDocumentBuilder();
+			parsedDoc = builder.parse(markupIS);
+		}
+		
+		return parsedDoc;
+	}
+	
+	public static String bodyChildrenToString(Document xmldoc) {
+		
+		StringWriter sw = new StringWriter();
+		NodeList children = xmldoc.getFirstChild().getChildNodes();
+		
+		Transformer transformer = null;
+		
+		try {
+			transformer = TransformerFactory.newInstance().newTransformer();
+			
+			transformer.setOutputProperty(OutputKeys.ENCODING, "UTF8");
+			transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+			transformer.setOutputProperty(OutputKeys.METHOD, "html");
+			transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+		}
+		catch (TransformerConfigurationException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		catch (TransformerFactoryConfigurationError e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		
+		if (transformer != null) {
+			for (int i = 0; i < children.getLength(); i++) {
+				DOMSource childDOM = new DOMSource(children.item(i));
+				
+				try {
+					transformer.transform(childDOM, new StreamResult(sw));
+				}
+				catch (TransformerException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				
+			}
+		}
+		return sw.getBuffer().toString();
+	}
+	
+	public static String documentToString(Document xmldoc) {
+		
+		StringWriter sw = new StringWriter();
+		
+		Transformer transformer;
+		
+		try {
+			transformer = TransformerFactory.newInstance().newTransformer();
+			transformer.setOutputProperty(OutputKeys.ENCODING, "UTF8");
+			transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+			transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+			transformer.transform(new DOMSource(xmldoc), new StreamResult(sw));
+			
+		}
+		catch (TransformerConfigurationException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		catch (TransformerFactoryConfigurationError e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		catch (TransformerException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		return sw.getBuffer().toString();
+		
+	}
+	
+	public static String elementToString(Element elem) {
+		
+		StringWriter sw = new StringWriter();
+		
+		Transformer transformer;
+		
+		try {
+			transformer = TransformerFactory.newInstance().newTransformer();
+			transformer.setOutputProperty(OutputKeys.ENCODING, "UTF8");
+			transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+			transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+			transformer.transform(new DOMSource(elem), new StreamResult(sw));
+			
+		}
+		catch (TransformerConfigurationException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		catch (TransformerFactoryConfigurationError e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		catch (TransformerException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		return sw.getBuffer().toString();
+		
+	}
+	
+	public static Document convertStringToDocument(String markup)
+	        throws UnsupportedEncodingException, ParserConfigurationException, SAXException, IOException {
+		
+		/*String parser = XMLResourceDescriptor.getXMLParserClassName();
+		SAXSVGDocumentFactory docFactory = new SAXSVGDocumentFactory(parser);*/
+		
+		Document parsedSvgDoc = null;
+		
+		//StringReader svgReader = new StringReader(markup);
+		InputStream svgMarkupIS = null;
+		
+		svgMarkupIS = new ByteArrayInputStream(markup.getBytes("UTF-8"));
+		
+		//try to create an XML/SVG document from the markup string 
+		//SVGDoc = docFactory.createDocument("SVG", SVGReader);
+		
+		DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+		//factory.set
+		DocumentBuilder builder = factory.newDocumentBuilder();
+		parsedSvgDoc = builder.parse(svgMarkupIS);
+		
+		return parsedSvgDoc;
+	}
 	
 	/**
-	 *  @param  an image
-	 *  @param  String containing the extension of image
-	 *  @return String containing Base64 encoded image/null if there is a problem in encoding
-	 *  @throws IOException
+	 * @param an image
+	 * @param String containing the extension of image
+	 * @return String containing Base64 encoded image/null if there is a problem in encoding
+	 * @throws IOException
 	 */
 	public static String imageToBase64(BufferedImage img, String extension) throws IOException {
 		String encodedImage = null;
@@ -77,13 +298,11 @@ public class DrawingUtil {
 		return encodedImage;
 	}
 	
-	
-	
 	/**
-	 *  @param  an image
-	 *  @param  String containing the extension of image
-	 *  @return String containing Base64 encoded image/null if there is a problem in encoding
-	 *  @throws IOException
+	 * @param an image
+	 * @param String containing the extension of image
+	 * @return String containing Base64 encoded image/null if there is a problem in encoding
+	 * @throws IOException
 	 */
 	public static String imageToBase64(File file) throws IOException {
 		
@@ -96,13 +315,14 @@ public class DrawingUtil {
 		return null;
 		
 	}
+	
 	/**
-	 *  Converts a Base64 String to image 
+	 * Converts a Base64 String to image
+	 * 
 	 * @param base64Data
 	 * @return image
 	 * @throws IOException
 	 */
-
 	
 	public static BufferedImage base64ToImage(String base64Data) throws IOException {
 		
@@ -129,11 +349,11 @@ public class DrawingUtil {
 	/**
 	 * @param request
 	 * @param id
-	 * @return array of annotations 
+	 * @return array of annotations
 	 */
 	
-	
-	public static ImageAnnotation[] getAnnotations(HttpServletRequest request, String id) {
+	//TODO support loading legacy 1.1 image and XML and resaving as SVG
+	/*public static ImageAnnotation[] getAnnotations(HttpServletRequest request, String id) {
 		if (id == null)
 			id = "";
 		ArrayList<ImageAnnotation> annotations = new ArrayList<ImageAnnotation>();
@@ -151,7 +371,8 @@ public class DrawingUtil {
 			}
 		}
 		return annotations.toArray(new ImageAnnotation[0]);
-	}
+	}*/
+	
 	/**
 	 * @return the directory specified in {@link DrawingConstants#DRAWINGDIRECTORY}
 	 */
@@ -164,24 +385,55 @@ public class DrawingUtil {
 			return file;
 	}
 	
-	private static void loadDefaultTemplates(File file)  {
+	private static void loadDefaultTemplates(File file) {
 		try {
-	        String s=OpenmrsClassLoader.getInstance().getResource(DrawingConstants.DRAWINGDIRECTORY).getPath();
-	        File f=new File(s);
-	         FileUtils.copyDirectory(f, file);
-        }
-        catch (Exception e) {
+			String s = OpenmrsClassLoader.getInstance().getResource(DrawingConstants.DRAWINGDIRECTORY).getPath();
+			File f = new File(s);
+			FileUtils.copyDirectory(f, file);
+		}
+		catch (Exception e) {
 			log.error("Unable to copy templates from resources to app directory", e);
-        }
-		
+		}
 		
 	}
 	
+	public static String getServerResourcesPath(String resourceName) {
+		String resourcePath = null;
+		
+		try {
+			
+			//this works when running, it should be tested when testing, but falls back
+			//to the secondary OpenmrsClassLoader method
+			ModuleClassLoader drawingModule = ModuleFactory.getModuleClassLoader("drawing");
+			
+			resourcePath = drawingModule.getResource(resourceName).getPath();
+			
+		}
+		catch (NullPointerException e) {
+			
+			try {
+				//this method loads resources from other modules
+				//and works during unit testing
+				resourcePath = OpenmrsClassLoader.getInstance().getResource(resourceName).getPath();
+			}
+			catch (Exception e2) {
+				RuntimeException moreInfo = new RuntimeException("Unable to find resource: " + resourceName);
+				
+				moreInfo.addSuppressed(e2);
+				
+				throw moreInfo;
+				
+			}
+		}
+		
+		return resourcePath;
+	}
 	
 	/**
-	 *  encodes the of the contents of file using Base64 encoder
-	 *  @param  filename
-	 *  @return String containing Base64 encoding of file. if file does not exist ,null
+	 * encodes the of the contents of file using Base64 encoder
+	 * 
+	 * @param filename
+	 * @return String containing Base64 encoding of file. if file does not exist ,null
 	 */
 	public static String getTemplateAsBase64ByName(String name) throws IOException {
 		File file = new File(getDrawingDirectory(), name);
@@ -193,25 +445,25 @@ public class DrawingUtil {
 		
 	}
 	
-	
 	/**
-	 *   Checks if the file has one of the extensions defined in {@link DrawingConstants#ACCEPTDEXTENSIONS}
-	 *  @param  filename
-	 *  @return boolean
+	 * Checks if the file has one of the extensions defined in
+	 * {@link DrawingConstants#ACCEPTDEXTENSIONS}
+	 * 
+	 * @param filename
+	 * @return boolean
 	 */
 	public static boolean isImage(String fileName) {
 		String extension = getExtension(fileName);
 		for (String s : DrawingConstants.ACCEPTDEXTENSIONS)
 			if (extension.toUpperCase().equals(s))
 				return true;
-		
+			
 		return false;
 	}
 	
-	
 	/**
-	 *  @param  filename
-	 *  @return the extension of file otherwise "raw"
+	 * @param filename
+	 * @return the extension of file otherwise "raw"
 	 */
 	public static String getExtension(String filename) {
 		String[] filenameParts = filename.split("\\.");
@@ -224,9 +476,9 @@ public class DrawingUtil {
 		return extension;
 	}
 	
-	
 	/**
-	 *  @return Names off all the files with extensions defined in {@link DrawingConstants#ACCEPTDEXTENSIONS}
+	 * @return Names off all the files with extensions defined in
+	 *         {@link DrawingConstants#ACCEPTDEXTENSIONS}
 	 */
 	public static String[] getAllTemplateNames() {
 		File dir = getDrawingDirectory();
@@ -234,9 +486,9 @@ public class DrawingUtil {
 	}
 	
 	/**
-	 *  @param  name of the file
-	 *  @param  Image to be saved
-	 *  @return true if file is saved other wise false
+	 * @param name of the file
+	 * @param Image to be saved
+	 * @return true if file is saved other wise false
 	 */
 	public static Boolean saveFile(String name, BufferedImage bi) {
 		File f = new File(getDrawingDirectory(), name);
@@ -250,15 +502,18 @@ public class DrawingUtil {
 		return saved;
 	}
 	
-	
 	/**
-	 *  @param  name of the file to be deleted
-	 *  @return returns true if file is deleted else false
+	 * @param name of the file to be deleted
+	 * @return returns true if file is deleted else false
 	 */
 	public static Boolean deleteTemplate(String name) {
 		File f = new File(getDrawingDirectory(), name);
 		Boolean deleted = f.exists() ? f.delete() : true;
 		return deleted;
+	}
+	
+	public static String translateLanguageKey(String key) {
+		return mss.getMessage(key);
 	}
 	
 }

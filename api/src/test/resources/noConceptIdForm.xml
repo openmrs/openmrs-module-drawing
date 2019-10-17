@@ -1,0 +1,6 @@
+<htmlform formVersion="1.0">
+	Date: <encounterDate/>
+	Location: <encounterLocation/>
+	Provider: <encounterProvider role="Provider"/>
+	Drawing: <drawing/>
+</htmlform>

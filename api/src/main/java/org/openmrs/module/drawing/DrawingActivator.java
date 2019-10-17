@@ -19,6 +19,7 @@ import org.openmrs.api.context.Context;
 import org.openmrs.module.ModuleActivator;
 import org.openmrs.module.ModuleFactory;
 import org.openmrs.module.drawing.handlers.DrawingTagHandler;
+import org.openmrs.module.drawing.DrawingConstants;
 import org.openmrs.module.htmlformentry.HtmlFormEntryService;
 
 /**
@@ -57,12 +58,12 @@ public class DrawingActivator implements ModuleActivator {
 	 */
 	public void started() {
 		log.info("Drawing Module started");
-	if (ModuleFactory.isModuleStarted("htmlformentry")) {
+		if (ModuleFactory.isModuleStarted("htmlformentry")) {
 			try {
 				
 				HtmlFormEntryService hfes = Context.getService(HtmlFormEntryService.class);
 				
-				hfes.addHandler("drawing", new DrawingTagHandler());
+				hfes.addHandler(DrawingConstants.DRAWING_TAG, new DrawingTagHandler());
 				
 				log.info("drawing : drawing tag registered");
 			}
