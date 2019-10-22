@@ -88,28 +88,27 @@
 	<build>
 		<plugins>
 	 		<plugin>
-		        <groupId>net.revelc.code.formatter</groupId>
-		        <artifactId>formatter-maven-plugin</artifactId>
-		        <version>2.10.0</version>
-		        <executions>
-		          <execution>
-		            <phase>compile</phase>
-		            <goals>
-		              <goal>format</goal>
-		            </goals>
-		            <configuration>
-		              <directories>
-		                <directory>.</directory>
-		              </directories>
-		              <configFile>../OpenMRSFormatter.xml</configFile>
-		              <includes>
-		                <include>**/*.java</include>
-		                <include>**/*.json</include>
-		                <include>**/*.js</include>
-		              </includes>
-		            </configuration>
-		          </execution>
-		        </executions>
+        <groupId>net.revelc.code.formatter</groupId>
+        <artifactId>formatter-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>compile</phase>
+            <goals>
+              <goal>format</goal>
+            </goals>
+            <configuration>
+              <directories>
+                <directory>.</directory>
+              </directories>
+              <configFile>../OpenMRSFormatter.xml</configFile>
+              <includes>
+                <include>**/*.java</include>
+                <include>**/*.json</include>
+                <include>**/*.js</include>
+              </includes>
+            </configuration>
+          </execution>
+        </executions>
 			</plugin>
 	  	</plugins>
 		<resources>
