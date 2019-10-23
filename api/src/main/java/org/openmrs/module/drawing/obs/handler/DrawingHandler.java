@@ -25,9 +25,9 @@ import org.openmrs.Obs;
 import org.openmrs.module.drawing.DrawingConstants;
 import org.openmrs.module.drawing.DrawingUtil;
 import org.openmrs.obs.ComplexData;
+import org.openmrs.obs.ComplexObsHandler;
 import org.openmrs.obs.handler.TextHandler;
 import org.openmrs.web.WebConstants;
-import org.openmrs.obs.ComplexObsHandler;
 
 /**
  *
@@ -120,8 +120,24 @@ public class DrawingHandler extends TextHandler {
 		return o;
 	}
 	
+	@Override
 	public Obs getObs(Obs obs, String view) {
 		File svgFile = getComplexDataFile(obs);
+		
+		//AnnotatedImage ai = new AnnotatedImage(svgFile);
+		//		
+		//Set<Obs> textAnnotations = obs.getGroupMembers();
+		//		
+		//Map<String, String> annotationMap = new HashMap<String, String>();
+		//		
+		//if (textAnnotations != null) {
+		//	for (Obs ann : textAnnotations) {
+		//		annotationMap.put(ann.getUuid(), ann.getValueText());
+		//	}
+		//}
+		
+		//this would update the SVG text tags with the text from the DB (e.g. in the case it was changed outside of the form)
+		//ai.populateAnnotations(annotationMap);
 		
 		//not loading this into the annotated image wont verify the file is valid
 		//but since the user may not use annotated image or may just 
@@ -302,6 +318,7 @@ public class DrawingHandler extends TextHandler {
 				log.error("drawing: Error saving image metadata: " + e.getClass() + " " + e.getMessage());
 			}
 		}
+	}
 	*/
 	/**
 	 * Convenience method to create and return a file for the stored metadata file

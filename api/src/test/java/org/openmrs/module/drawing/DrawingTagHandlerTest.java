@@ -3,9 +3,11 @@
  */
 package org.openmrs.module.drawing;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 //import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -234,6 +236,31 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 			conceptService.saveConcept(complexConcept);
 			
 			complexConceptId = complexConcept.getId();
+		}
+		
+		{
+			final String name = "SVG OBS GROUP";
+			final String desc = "Concept for grouping 'SVG attachment' complex obs and text annotations (used by drawing module)";
+			final String uuid = DrawingConstants.CONCEPT_SVG_GROUP_UUID;
+			
+			DrawingConstants.svgGroupConcept = conceptService.getConceptByUuid(uuid);
+			
+			//if this concept does not yet exist in the db
+			if (null == DrawingConstants.svgGroupConcept) {
+				
+				//create it
+				Concept groupConcept = new Concept();
+				groupConcept.setUuid(uuid);
+				ConceptName conceptName = new ConceptName(name, Locale.ENGLISH);
+				groupConcept.setFullySpecifiedName(conceptName);
+				groupConcept.setPreferredName(conceptName);
+				groupConcept.setConceptClass(conceptService.getConceptClassByName("ConvSet"));
+				groupConcept.setDatatype(conceptService.getConceptDatatypeByUuid(ConceptDatatype.N_A_UUID));
+				groupConcept.addDescription(new ConceptDescription(desc, Locale.ENGLISH));
+				
+				//store it
+				DrawingConstants.svgGroupConcept = conceptService.saveConcept(groupConcept);
+			}
 		}
 	}
 	
@@ -811,11 +838,16 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 				
 				for (Obs curObs : allObs) {
 					
-					//this seems unnecessary, but it is the expected procedure
-					//based on the comments for getComplexData()
-					Obs obs = Context.getObsService().getObs(curObs.getId());
-					
-					obs.getComplexData().getData().equals(svgDom);
+					//voided complex obs currently have file deleted in TRUNK
+					//obs group is now created
+					if (!curObs.getVoided() && curObs.getConcept().equals(complexConcept)) {
+						//this seems unnecessary, but it is the expected procedure
+						//based on the comments for getComplexData()
+						Obs obs = Context.getObsService().getObs(curObs.getId());
+						
+						obs.getComplexData().getData().equals(svgDom);
+						
+					}
 				}
 			}
 			//Replay		
@@ -873,11 +905,18 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 				
 				for (Obs curObs : allObs) {
 					
-					//this seems unnecessary, but it is the expected procedure
-					//based on the comments for getComplexData()
-					Obs obs = Context.getObsService().getObs(curObs.getId());
-					
-					obs.getComplexData().getData().equals(svgDom);
+					//Trunk still has an issue where voiding complex obs deletes the file
+					//when previousVersion is set
+					if (!curObs.getVoided() && curObs.getConcept().equals(complexConcept)) {
+						//this seems unnecessary, but it is the expected procedure
+						//based on the comments for getComplexData()
+						Obs obs = Context.getObsService().getObs(curObs.getId());
+						
+						assertNotNull("ComplexData should not be null", obs.getComplexData());
+						assertNotNull("ComplexData Data should not be null", obs.getComplexData().getData());
+						
+						obs.getComplexData().getData().equals(svgDom);
+					}
 				}
 				
 				//verifies the data is actually stored in the db
@@ -991,10 +1030,11 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 				try {
 					form = DrawingUtil.convertStringToDocument(html);
 				}
-				catch (ParserConfigurationException | SAXException | IOException e) {
+				catch (ParserConfigurationException | SAXException | IOException e1) {
 					// TODO Auto-generated catch block
-					e.printStackTrace();
+					e1.printStackTrace();
 				}
+				
 				rootSvg = DrawingUtil.getElementById("root-svg", form);
 			}
 			
@@ -1324,21 +1364,23 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 				
 				for (Obs obs : allObsWithVoided) {
 					
-					Obs tmp = Context.getObsService().getObs(obs.getId());
-					
-					checkObsFilename(obs.getUuid(), tmp);
-					
-					if (obs.getVoided()) {
-						//if the voided obs has already been seen 
-						if (!voidedObsMap.containsKey(obs)) {
-							voidedObsMap.put(obs, null);
+					if (obs.getConcept().equals(complexConcept)) {
+						Obs tmp = Context.getObsService().getObs(obs.getId());
+						
+						checkObsFilename(tmp.getUuid(), tmp);
+						
+						if (obs.getVoided()) {
+							//if the voided obs has already been seen 
+							if (!voidedObsMap.containsKey(obs)) {
+								voidedObsMap.put(obs, null);
+							}
+						} else {
+							Obs voidedObs = obs.getPreviousVersion();
+							assertNotEquals("New observations should store previous observations as previous version",
+							    voidedObs, (Obs) null);
+							newObsMap.put(obs, voidedObs);
+							voidedObsMap.put(voidedObs, obs);
 						}
-					} else {
-						Obs voidedObs = obs.getPreviousVersion();
-						assertNotEquals("New observations should store previous observations as previous version", voidedObs,
-						    (Obs) null);
-						newObsMap.put(obs, voidedObs);
-						voidedObsMap.put(voidedObs, obs);
 					}
 				}
 				
@@ -1450,20 +1492,25 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 				
 				//verify the file was created
 				results.assertEncounterCreated();
-				results.assertObsCreatedCount(1);
+				
+				//creates both complex obs and grouping obs
+				results.assertObsCreatedCount(2);
 				Encounter enc = results.getEncounterCreated();
 				
 				Set<Obs> allObs = enc.getAllObs();
 				
 				for (Obs obs : allObs) {
-					assertTrue("Obs should be saved with the test complex concept",
-					    obs.getConcept().getId() == complexConceptId);
 					
-					Obs tmp = Context.getObsService().getObs(obs.getId());
-					
-					byte[] storedData = (byte[]) tmp.getComplexData().getData();
-					byte[] svgData = svgDom.getBytes();
-					assertTrue("Data should match the submitted form value", Arrays.equals(svgData, storedData));
+					if (obs.isComplex()) {
+						assertTrue("Obs should be saved with the test complex concept",
+						    obs.getConcept().getId() == complexConceptId);
+						
+						Obs tmp = Context.getObsService().getObs(obs.getId());
+						
+						byte[] storedData = (byte[]) tmp.getComplexData().getData();
+						byte[] svgData = svgDom.getBytes();
+						assertArrayEquals("Data should match the submitted form value", svgData, storedData);
+					}
 				}
 			}
 			
@@ -1543,32 +1590,34 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 					fail("There were validation errors: " + results.getValidationErrors().toString());
 				}
 				
-				results.assertObsCreatedCount(1);
+				//complex obs and grouping obs
+				results.assertObsCreatedCount(2);
 				
 				for (Obs obs : editEncounter.getAllObs()) {
 					
 					Obs tmp = Context.getObsService().getObs(obs.getId());
 					
-					checkObsFilename(obs.getUuid(), tmp);
-					
-					ComplexData cd = tmp.getComplexData();
-					
-					String data = new String((byte[]) cd.getData());
-					
-					//this isn't really what this test is intended to check, but refer to
-					//the code following it for explanation of why it doesn't currently work
-					assertTrue("Complex Data should be identical", data.equals(svgDom));
-					
-					//List<List<Object>> sqlResults = DatabaseUtil.executeSQL(getConnection(), "SELECT obs_id FROM obs WHERE concept_id='"+complexConceptId+"';", true);
-					
-					//because of the dirty flag the file is rewritten, can't check fs file time
-					//when a handler handles a getObs()
-					//it calls setComplexData() which sets the dirty flag
-					
-					//System.out.println(sqlResults);
-					//assertEquals("There should be only one matching observation in the db but there were "+ sqlResults.toString(),
-					//		1, sqlResults.size());
-					
+					if (tmp.isComplex()) {
+						checkObsFilename(obs.getUuid(), tmp);
+						
+						ComplexData cd = tmp.getComplexData();
+						
+						String data = new String((byte[]) cd.getData());
+						
+						//this isn't really what this test is intended to check, but refer to
+						//the code following it for explanation of why it doesn't currently work
+						assertTrue("Complex Data should be identical", data.equals(svgDom));
+						
+						//List<List<Object>> sqlResults = DatabaseUtil.executeSQL(getConnection(), "SELECT obs_id FROM obs WHERE concept_id='"+complexConceptId+"';", true);
+						
+						//because of the dirty flag the file is rewritten, can't check fs file time
+						//when a handler handles a getObs()
+						//it calls setComplexData() which sets the dirty flag
+						
+						//System.out.println(sqlResults);
+						//assertEquals("There should be only one matching observation in the db but there were "+ sqlResults.toString(),
+						//		1, sqlResults.size());
+					}
 				}
 			}
 			

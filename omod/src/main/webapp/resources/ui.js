@@ -73,41 +73,58 @@ function extendPath(){
 
 }
 
+function addExistingLayers(){
+  let elementTypes = [
+    "path",
+    "text",
+    "line",
+    "circle",
+    "image"
+  ];
+
+  var rootSvg = document.getElementById("root-svg");
+	for(child of rootSvg.children){
+    if(elementTypes.includes(child.nodeName) && child.getAttribute("data-ignore-layer")!="true"){
+      addLayer(SVG.get(child.id));
+    }
+  }
+}
+
 SVG.on(document, 'DOMContentLoaded', function() {
 
 	calcScrollbarsizes();
 
-    extendPath();
+  extendPath();
+    
+  updateSvgView();
 
-	//this will fix 
 	var domInput = document.getElementById("svgDOM")
 	if( domInput != null && domInput.value !== "" ) {
 		var svgParentNode = document.getElementById("svg-container-div");
 		
 		//escape and unescape are deprecated
 		svgParentNode.innerHTML = unescape(domInput.value);
-	}
-
-	var root = document.getElementById("root-svg");
-	
-	//SVG will readd these namespace attributes, it doesnt check if they
-	//already exist, which leads to an error when it is sent back to the
-	//server (duplicate attribute)
-	root.removeAttribute("xmlns");
-	root.removeAttribute("xmlns:svgjs");
-	root.removeAttribute("xmlns:xlink");
-
-	//calling this here stores the fixed svgDOM with two xmlns:svgjs's in the input value
+		var root = document.getElementById("root-svg");
+		
+		//SVG will readd these namespace attributes, it doesnt check if they
+		//already exist, which leads to an error when it is sent back to the
+		//server (duplicate attribute)
+		root.removeAttribute("xmlns");
+		root.removeAttribute("xmlns:svgjs");
+    root.removeAttribute("xmlns:xlink");
+    
+    //store the updated markup
     updateSvgView();
+	}
 
     drawing = SVG("root-svg").size("100%", "100%");
 
     toolMap["draw"]["select-tool"] = document.getElementById("select-tool");
     toolMap["draw"]["text-tool"] = document.getElementById("text-tool");
     toolMap["draw"]["path-tool"] = document.getElementById("path-tool");
-	toolMap["draw"]["line-tool"] = document.getElementById("line-tool");
+	  toolMap["draw"]["line-tool"] = document.getElementById("line-tool");
     toolMap["draw"]["circle-tool"] = document.getElementById("circle-tool");
-	toolMap["draw"]["layer-info-vis-toggle"] = document.getElementById("layer-info-vis-toggle");
+	  toolMap["draw"]["layer-info-vis-toggle"] = document.getElementById("layer-info-vis-toggle");
     /*toolMap["draw"]["poly-tool"] = document.getElementById("poly-tool");*/
 
     toolMap["layer"]["edit-tool"] = document.getElementById("edit-tool");
@@ -118,9 +135,26 @@ SVG.on(document, 'DOMContentLoaded', function() {
     toolMap["layer"]["send-to-back-tool"] = document.getElementById("send-to-back-tool");
     toolMap["layer"]["void-tool"] = document.getElementById("void-tool");
     toolMap["layer"]["delete-tool"] = document.getElementById("delete-tool");
-	
-    setPathTool();
-    
+  
+    var rootSvg = document.getElementById("root-svg");
+
+    //supports selecting the default tool, generally path for signatures
+    switch(rootSvg.getAttribute("data-default-tool")){
+      
+      case "select-tool":
+        setSelectTool();
+        break;
+
+      case "text-tool":
+        setTextTool();
+        break;
+
+      default:
+      case "path-tool":
+          setPathTool();
+          break;
+    }
+
     drawing.on('mousedown', function(e){
         //console.log("mousedown occurred, tool is ", tool);
 
@@ -134,14 +168,9 @@ SVG.on(document, 'DOMContentLoaded', function() {
         tool.draw('stop', e);
         
         updateSvgView();
-    }, false);
+    }, false);    
 
-//hacky uhg, overflow scroll won't work in flexbox without a fixed height?
-//    var height = document.querySelector("#root-svg").clientHeight;
-//    document.querySelector(".layer-div").style.height = height;
-//    document.querySelector("#root-svg").style.height = height;
-    
-
+	addExistingLayers();
 });
 
 function updateSvgView(){
@@ -216,8 +245,19 @@ function setToggle(buttonId, exclusiveGroup) {
   var button = document.getElementById(buttonId);
 
   //TODO evaluate layer UX
-  //breaks current move functionality
-  //selectElement(document.getElementById("root-svg"));
+  //if this is not a type of layer operation
+  if(exclusiveGroup !== "layer") {  	
+    //deselect any selected elements
+    selectElement(document.getElementById("root-svg"));
+  }
+  
+    //remove highlighting if it exists, if setting select tool, it will be re-added
+    var highlightStyle = document.getElementById("highlight-style");
+    
+    if(highlightStyle!==null) {
+      highlightStyle.remove();
+    }
+  
 
   //if this button is a normal toggle, just toggle it
   if(exclusiveGroup===undefined && button.hasAttribute("aria-pressed")){
@@ -435,6 +475,19 @@ function getSelectableElement(elem, returnSVG){
 function setSelectTool(event){
   setToggle("select-tool", "draw");
 
+  //https://www.w3.org/wiki/Dynamic_style_-_manipulating_CSS_with_JavaScript
+
+  //a style to highlight which svg element should be selected when clicking
+  //this is applied when entering and should be removed when exiting select mode
+  //as it can be distracting if it were always on
+  var highlightOverRule = "svg *:hover { filter: url(#dropshadow); }";
+  
+  var highlightStyle = document.createElement("style");
+  highlightStyle.setAttribute("id", "highlight-style");
+  highlightStyle.innerHTML = highlightOverRule;
+  
+  document.body.appendChild(highlightStyle);
+
   tool = {
             draw: function(eOrMsg, e){
                 //console.log(eOrMsg, e);
@@ -523,6 +576,41 @@ function pxToInt(str) {
     return res;
 }
 
+function createTextGroup(text, fontSize, x, y){
+  var baseGroup = drawing.group();
+
+  baseGroup.translate(x, y);
+  baseGroup.use("pin-icon").scale(0.25, 0.25);
+
+  //create a second child group to make it easier to change the visibility
+  var group = baseGroup.group();
+
+  //add background rect
+  group
+    .rect(0, 0, "100%", "100%")
+    .attr("fill", "white")
+    .attr("stroke", "black")
+    .radius(15)
+    .attr("x", x)
+    .attr("y", y)
+    .attr("visibility", "inherit");
+
+  //add the specific text
+  group
+    .text(text)
+    .attr("x", x)
+    .attr("y", y)
+    .attr("stroke","black")
+    .attr("stroke-width",.5)
+    .attr("fill","black")
+    .font("size", fontSize)
+    .attr("visibility", "inherit");
+
+  group.attr("visibility", "collapse");
+
+  return group;
+}
+
 function createText(){
   
   var textareaPopup = document.getElementById("textarea-popup");
@@ -543,16 +631,9 @@ function createText(){
   	fontSize = "1em";
   }
 
-  var textElement = drawing
-  						.text(text)
-  						.attr("x", x)
-  						.attr("y", y)
-  						.attr("stroke","black")
-  						.attr("stroke-width",.5)
-  						.attr("fill","black")
-  						.font("size", fontSize);
-
-  addLayer(textElement);
+  var textGroup = createTextGroup(text, fontSize, x, y);
+  
+  addLayer(textGroup);
 
   //remove and select new area after adding layer so selection in layer list is updated
   if(mode==="edit") {

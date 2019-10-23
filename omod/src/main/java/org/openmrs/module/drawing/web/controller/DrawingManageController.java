@@ -40,6 +40,11 @@ public class DrawingManageController {
 	
 	@RequestMapping(value = "/module/drawing/manage", method = RequestMethod.GET)
 	public void manage(ModelMap model, HttpServletRequest request) {
+		String download = request.getParameter("download");
+		
+		if (download != null) {
+			//provide redirect/file blob?
+		}
 		
 		if (StringUtils.isNotBlank(request.getParameter("obsId"))) {
 			int obsId = Integer.parseInt(request.getParameter("obsId"));
@@ -48,9 +53,11 @@ public class DrawingManageController {
 				log.error("obs is not complex ");
 			} else {
 				
+				//the drawingHandler.getObs call implied here
+				//will call populateAnnotation() on AnnotatedImage, this is 
+				//a little bit roundabout, but insures that all codepaths will
+				//have up to date annotation text
 				AnnotatedImage ai = new AnnotatedImage(new String((byte[]) obs.getComplexData().getData()));
-				
-				//TODO for TFS-145140, pull most recent annotation text from db here
 				
 				String svgMarkup = DrawingUtil.documentToString(ai.getImageDocument());
 				

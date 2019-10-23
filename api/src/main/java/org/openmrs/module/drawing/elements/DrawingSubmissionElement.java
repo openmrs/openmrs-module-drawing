@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -16,20 +17,24 @@ import javax.xml.parsers.ParserConfigurationException;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
-import org.openmrs.api.context.Context;
 import org.openmrs.Concept;
 import org.openmrs.Obs;
-import org.openmrs.module.drawing.DrawingConstants;
+import org.openmrs.api.ObsService;
+import org.openmrs.api.context.Context;
 import org.openmrs.module.drawing.AnnotatedImage;
+import org.openmrs.module.drawing.DrawingConstants;
 import org.openmrs.module.drawing.DrawingUtil;
+import org.openmrs.module.drawing.DrawingUtil.IHandleTextAnnObsStorage;
 import org.openmrs.module.htmlformentry.FormEntryContext;
 import org.openmrs.module.htmlformentry.FormEntryContext.Mode;
 import org.openmrs.module.htmlformentry.FormEntrySession;
+import org.openmrs.module.htmlformentry.FormSubmissionActions;
 import org.openmrs.module.htmlformentry.FormSubmissionError;
 import org.openmrs.module.htmlformentry.HtmlFormEntryUtil;
 import org.openmrs.module.htmlformentry.action.FormSubmissionControllerAction;
 import org.openmrs.module.htmlformentry.element.HtmlGeneratorElement;
+//import org.openmrs.module.htmlformentry.schema.ObsGroup;
+//import org.openmrs.module.htmlformentry.action.ObsGroupAction;
 import org.openmrs.obs.ComplexData;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -37,16 +42,26 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
-//public class DrawingSubmissionElement {
-public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmissionControllerAction {
+public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmissionControllerAction, IHandleTextAnnObsStorage {
 	
-	private static final Log log = LogFactory.getLog(DrawingSubmissionElement.class);
-	
-	private String htmlId;
+	private Log log = LogFactory.getLog(AnnotatedImage.class);
 	
 	private Concept questionConcept;
 	
-	private Obs existingObs;
+	private Obs parentGroupObs;
+	
+	private Obs parentObs;
+	
+	private String htmlId;
+	
+	private FormEntrySession currentSession;
+	
+	private Date date;
+	
+	//@Autowired
+	private ObsService obsService;
+	
+	private Obs svgGroupObs;
 	
 	private enum DisplayMode {
 		Invalid,
@@ -65,6 +80,8 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 	private String fixedWidth;
 	
 	private String fixedHeight;
+	
+	private String defaultTool;
 	
 	private Document svgWidgetTemplate;
 	
@@ -184,10 +201,31 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 			excludedButtonIds = Arrays.asList(ids);
 		}
 		
+		//returns the top level obs which is the grouping obs
 		Map<Concept, List<Obs>> prevObs = context.getExistingObs();
+		
 		if (prevObs != null && prevObs.size() > 0) {
 			
-			existingObs = prevObs.get(questionConcept).get(0);
+			List<Obs> groupObs = prevObs.get(DrawingConstants.svgGroupConcept);
+			
+			if (groupObs != null && groupObs.size() > 0) {
+				parentGroupObs = groupObs.get(0);
+				
+				Obs[] complexObs = parentGroupObs.getGroupMembers().parallelStream().filter(new Predicate<Obs>() {
+					
+					@Override
+					public boolean test(Obs curObs) {
+						if (curObs.isComplex() && curObs.getConcept().equals(questionConcept)) {
+							return true;
+						}
+						
+						return false;
+					}
+					
+				}).toArray(Obs[]::new);
+				
+				parentObs = complexObs[0];
+			}
 			
 			//make sure the instance is loaded with complexData, according
 			//to getComplexData() comments it won't be guaranteed unless
@@ -199,7 +237,7 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 			//(and thereby deletes the complex obs file)
 			//by not triggering the set of the dirty flag, saveObsNotDirty
 			//will be called in ObsServiceImpl.saveObs() instead
-			existingObs = Context.getObsService().getObs(existingObs.getId());
+			parentObs = Context.getObsService().getObs(parentObs.getId());
 		}
 		
 		//TODO move to static (or does it require autowiring?)
@@ -207,6 +245,19 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		//preloaded markup among all instances w/ a deep clone?
 		//(which over head is greater? clone or read from disk?)
 		svgWidgetTemplate = DrawingUtil.loadEditorMarkup(DrawingConstants.EDITOR_HTML_PATH);
+		
+		//opening the form for view/edit should not remove the existing observation
+		//TODO evaluate supporting the same concept multiple times in the same form
+		//Obs o = context.removeExistingObs(questionConcept, (Concept) null);
+		
+		defaultTool = parameters.get("defaultTool");
+		
+		//if no mode was specified, or using signature mode, 
+		//default to path tool, while it's not strictly required as default
+		//for annotation mode, it currently should be for signature mode
+		if (defaultTool == null || instancePurpose.equals(DisplayMode.Signature)) {
+			defaultTool = "path-tool";
+		}
 		
 	}
 	
@@ -225,6 +276,12 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 	@Override
 	public void handleSubmission(FormEntrySession session, HttpServletRequest submission) {
 		
+		date = new Date();
+		
+		currentSession = session;
+		
+		FormSubmissionActions actions = session.getSubmissionActions();
+		
 		String svgDOM = submission.getParameter("svgDOM");
 		
 		//only create a "new" obs if this parameter is posted
@@ -237,7 +294,7 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		
 		if (svgDOM == null || StringUtils.isBlank(svgDOM)) {
 			
-			String markup = new String((byte[]) existingObs.getComplexData().getData());
+			String markup = new String((byte[]) parentObs.getComplexData().getData());
 			
 			ai = new AnnotatedImage(markup);
 			
@@ -248,23 +305,39 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		if (ai.getParsingError() != DrawingUtil.ErrorStatus.NONE)
 			throw new RuntimeException("Error parsing the SVG document" + ai.getParsingError());
 		
+		byte[] svgByteArray = DrawingUtil.documentToString(ai.getImageDocument()).getBytes();
+		
+		svgGroupObs = null;
+		
 		try {
-			
-			byte[] svgByteArray = DrawingUtil.documentToString(ai.getImageDocument()).getBytes();
 			
 			//TODO verify this update pipeline works, and behaviors between
 			//both update pipelines match
-			if (session.getContext().getMode() == Mode.EDIT && existingObs != null) {
-				session.getSubmissionActions().modifyObs(existingObs, questionConcept,
+			if (session.getContext().getMode() == Mode.EDIT && parentObs != null) {
+				
+				Obs prevGroupObs = parentObs.getObsGroup();
+				
+				if (prevGroupObs != null) {
+					//obsService = Context.getObsService();
+					svgGroupObs = prevGroupObs;//Obs.newInstance(prevGroupObs);
+					//obsService.voidObs(prevGroupObs, "updating child observations via HFE");
+				}
+				
+				//store all the text annotations as observations, grouping them
+				//under the main complex obs
+				actions.beginObsGroup(svgGroupObs);
+				
+				actions.modifyObs(parentObs, questionConcept,
 				    new ComplexData(DrawingConstants.BASE_COMPLEX_OBS_FILENAME, svgByteArray), null, null);
 				
 				//should the modify codepath already handle setting previousObs?
-				Obs[] newObs = session.getSubmissionActions().getObsToCreate().parallelStream().filter(new Predicate<Obs>() {
+				//the new HFE code should handle this
+				Obs[] newObs = svgGroupObs.getGroupMembers().parallelStream().filter(new Predicate<Obs>() {
 					
 					@Override
 					public boolean test(Obs curObsToCreate) {
 						if (curObsToCreate.isComplex() && curObsToCreate.getComplexData() != null
-						        && svgByteArray.equals((byte[]) curObsToCreate.getComplexData().getData())) {
+						        && svgByteArray.equals(curObsToCreate.getComplexData().getData())) {
 							return true;
 						}
 						
@@ -273,12 +346,26 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 					
 				}).toArray(Obs[]::new);
 				
-				newObs[0].setPreviousVersion(existingObs);
+				newObs[0].setPreviousVersion(parentObs);
 				
 			} else {
-				session.getSubmissionActions().createObs(questionConcept,
-				    new ComplexData(DrawingConstants.BASE_COMPLEX_OBS_FILENAME, svgByteArray), null, null);
+				svgGroupObs = new Obs(session.getPatient(), DrawingConstants.svgGroupConcept, date, null);
+				
+				//actions.createObs(DrawingConstants.svgGroupConcept, null, date, null);
+				//store all the text annotations as observations, grouping them
+				//under the main complex obs
+				actions.beginObsGroup(svgGroupObs);
+				
+				actions.createObs(questionConcept, new ComplexData(DrawingConstants.BASE_COMPLEX_OBS_FILENAME, svgByteArray),
+				    null, null);
 			}
+			
+			//this class has access to the session which handles
+			//various details in the obs, it will be used to store
+			//the text annotations
+			ai.storeAnnotations(this);
+			
+			actions.endObsGroup();
 			
 		}
 		catch (Exception e) {
@@ -311,7 +398,7 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		
 		//TODO for now, during testing if the file can't be loaded, return early
 		if (svgWidgetTemplate == null) {
-			return "";
+			return "<span style='color:red;'>Error loading drawing element</span>";
 		}
 		
 		//always hide save button when using editor in HFE forms, the submit button will
@@ -328,6 +415,8 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		if (svgWidgetTemplate != null) {
 			Element rootSvg = DrawingUtil.getElementById("root-svg", svgWidgetTemplate);
 			
+			rootSvg.setAttribute("data-default-tool", defaultTool);
+			
 			//TODO patch up widgetTemplate using DOM methods
 			//1. make all ids (hopefully) unique (html form entry unique id?)
 			//2. handle different classes (e.g. signature vs. annotated image)
@@ -339,10 +428,9 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 			DrawingUtil.translateLanguageKey("drawing.save");
 			
 			//in both view and edit, load the existing svg if it exists
-			if ((ctxMode == Mode.VIEW || ctxMode == Mode.EDIT) && existingObs != null) {
+			if ((ctxMode == Mode.VIEW || ctxMode == Mode.EDIT) && parentObs != null) {
 				
-				AnnotatedImage ai = (AnnotatedImage) new AnnotatedImage(
-				        new String((byte[]) existingObs.getComplexData().getData()));
+				AnnotatedImage ai = new AnnotatedImage(new String((byte[]) parentObs.getComplexData().getData()));
 				
 				//TODO after SVG DOM insertion is implemented, handle this section appropriately
 				Document svgDoc = ai.getImageDocument();
@@ -387,15 +475,16 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 					Element imageNode = svgWidgetTemplate.createElement("image");
 					
 					imageNode.setAttribute("href", base64preload);
+					imageNode.setAttribute("data-ignore-layer", "true");
 					rootSvg.appendChild(imageNode);
 				}
 				
 			}
 			
-			//these elements will be used to set explicit heights or visibility for
+			//these elements will be used to set explicit heights or visiblity for
 			//different purposes
 			Element parentDiv = DrawingUtil.getElementById("view-layer-parent", svgWidgetTemplate);
-			Element layerParentDiv = DrawingUtil.getElementById("layer-list-div", svgWidgetTemplate);
+			Element layerParentDiv = DrawingUtil.getElementById("layer-div", svgWidgetTemplate);
 			Element layerArrangeDiv = DrawingUtil.getElementById("arrange", svgWidgetTemplate);
 			
 			switch (instancePurpose) {
@@ -467,6 +556,7 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 				
 				default:
 					throw new RuntimeException("Invalid <drawing> displayMode");
+					
 			}
 			
 			Element[] fixedHeightDivs = { parentDiv, layerParentDiv, layerArrangeDiv };
@@ -486,9 +576,9 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 					
 					css += elemCss + "}";
 				}
+				
 			}
 			css += "</style>";
-			
 		}
 		
 		//add a hidden input to provide the SVG on submission
@@ -513,12 +603,40 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 			widgetMarkup = "<span style='color:red;'>Error loading drawing element</span>";
 		}
 		
-		//TODO use "correct" method to build the path to these js resources
 		String js = "<script src=\"../../moduleResources/drawing/svg.js\"></script>"
 		        + "<script src=\"../../moduleResources/drawing/svg.draw.js\"></script>"
 		        + "<script src=\"../../moduleResources/drawing/ui.js\"></script>";
 		
 		return css + widgetMarkup + js;
+	}
+	
+	//newObs return obsUuid
+	@Override
+	public String newObs(String text) {
+		
+		Obs newObs = currentSession.getSubmissionActions().createObs(DrawingConstants.textAnnConcept, text, date, null);
+		
+		//newObs.setObsGroup(parentObs);
+		
+		return newObs.getUuid();
+	}
+	
+	@Override
+	public void updateObs(String existingObsUuid, String text) {
+		Obs existingTextObs = obsService.getObsByUuid(existingObsUuid);
+		
+		currentSession.getSubmissionActions().modifyObs(existingTextObs, DrawingConstants.textAnnConcept, text, date, null);
+	}
+	
+	@Override
+	public void voidObs(String existingObsUuid, String reason) {
+		List<Obs> currentObsToVoid = currentSession.getSubmissionActions().getObsToVoid();
+		
+		Obs existingObs = obsService.getObsByUuid(existingObsUuid);
+		
+		currentObsToVoid.add(existingObs);
+		
+		currentSession.getSubmissionActions().setObsToVoid(currentObsToVoid);
 	}
 	
 }

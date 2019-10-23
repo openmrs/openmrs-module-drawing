@@ -16,6 +16,9 @@ package org.openmrs.module.drawing;
 import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -23,13 +26,13 @@ import javax.xml.parsers.ParserConfigurationException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.openmrs.module.drawing.obs.handler.DrawingHandler;
+import org.openmrs.module.drawing.DrawingUtil.ErrorStatus;
 import org.w3c.dom.DOMImplementation;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
-
-import org.openmrs.module.drawing.DrawingUtil.ErrorStatus;
 
 /**
  *
@@ -37,7 +40,6 @@ import org.openmrs.module.drawing.DrawingUtil.ErrorStatus;
 public class AnnotatedImage {
 	
 	private Log log = LogFactory.getLog(AnnotatedImage.class);
-	
 	//Rendering on the server will require something like apache batik, 
 	//which appeared to have some issue around xalan/xerces in previous trials
 	//private BufferedImage renderedImage;
@@ -46,8 +48,6 @@ public class AnnotatedImage {
 	//the needed functionality
 	private Document svgDoc;
 	
-	private DrawingHandler handler;
-	
 	private ErrorStatus status = ErrorStatus.NONE;
 	
 	public AnnotatedImage() {
@@ -55,9 +55,25 @@ public class AnnotatedImage {
 	}
 	
 	public AnnotatedImage(String markup) {
-		Document doc = tryConvertString(markup);
-		
-		createFromDocument(doc);
+		try {
+			createFromDocument(DrawingUtil.convertStringToDocument(markup));
+		}
+		catch (UnsupportedEncodingException e) {
+			e.printStackTrace();
+			status = ErrorStatus.FORMAT_ERROR;
+		}
+		catch (ParserConfigurationException e) {
+			e.printStackTrace();
+			status = ErrorStatus.INTERNAL_ERROR;
+		}
+		catch (SAXException e) {
+			e.printStackTrace();
+			status = ErrorStatus.FORMAT_ERROR;
+		}
+		catch (IOException e) {
+			e.printStackTrace();
+			status = ErrorStatus.FILE_ERROR;
+		}
 	}
 	
 	public AnnotatedImage(File svgFile) {
@@ -87,10 +103,6 @@ public class AnnotatedImage {
 		createFromDocument(svgDocFromFile);
 	}
 	
-	public AnnotatedImage(Document image) {
-		createFromDocument(image);
-	}
-	
 	private Document createNewDocument() {
 		//DOMImplementation impl = SVGDOMImplementation.getDOMImplementation();
 		//String svgNS = SVGDOMImplementation.SVG_NAMESPACE_URI;
@@ -112,35 +124,10 @@ public class AnnotatedImage {
 		}
 		catch (ParserConfigurationException e) {
 			e.printStackTrace();
+			status = ErrorStatus.INTERNAL_ERROR;
 		}
 		
 		return newSvgDoc;//impl.createDocument(svgNS, "svg", null);
-	}
-	
-	private Document tryConvertString(String markup) {
-		Document doc = null;
-		
-		try {
-			doc = DrawingUtil.convertStringToDocument(markup);
-		}
-		catch (UnsupportedEncodingException e) {
-			e.printStackTrace();
-			
-		}
-		catch (ParserConfigurationException e) {
-			this.status = ErrorStatus.INTERNAL_ERROR;
-			e.printStackTrace();
-		}
-		catch (SAXException e) {
-			this.status = ErrorStatus.FORMAT_ERROR;
-			e.printStackTrace();
-		}
-		catch (IOException e) {
-			this.status = ErrorStatus.FILE_ERROR;
-			e.printStackTrace();
-		}
-		
-		return doc;
 	}
 	
 	private void createFromDocument(Document image) {
@@ -148,22 +135,17 @@ public class AnnotatedImage {
 		if (image == null) {
 			status = ErrorStatus.NULL_DOC;
 			image = createNewDocument();
+			
 		}
 		
 		setImageDocument(image);
 		
-		/*
-		if (renderedImage == null)
-			log.info("gmapsimageviewer: Created new AnnotatedImage " + "containing a null image");
-		else
-			log.info("gmapsimageviewer: Created new AnnotatedImage " + "containing a " + renderedImage.getWidth() + "x"
-			        + renderedImage.getHeight() + " image");
-		*/
 	}
 	
 	/**
 	 * @return error if any error was encountered when loading the svg
 	 */
+	
 	public ErrorStatus getParsingError() {
 		return status;
 	}
@@ -202,16 +184,7 @@ public class AnnotatedImage {
 			
 			e.printStackTrace();
 		}*/
-		
 	}
-	
-	/**
-	 * @return the image
-	 */
-	//TODO re-eval issues/need to use batik to render a thumbnail
-	/*public BufferedImage getImage() {
-		return renderedImage;
-	}*/
 	
 	/**
 	 * @return svgImage the SVG org.w3c.Document that is set
@@ -225,21 +198,126 @@ public class AnnotatedImage {
 	 */
 	public void setImageDocument(String svgImage) {
 		
-		Document svgDoc = tryConvertString(svgImage);
+		Document svgDoc = null;
+		
+		try {
+			svgDoc = DrawingUtil.convertStringToDocument(svgImage);
+		}
+		catch (UnsupportedEncodingException e) {
+			e.printStackTrace();
+			status = ErrorStatus.FORMAT_ERROR;
+		}
+		catch (ParserConfigurationException e) {
+			e.printStackTrace();
+			status = ErrorStatus.INTERNAL_ERROR;
+		}
+		catch (SAXException e) {
+			e.printStackTrace();
+			status = ErrorStatus.FORMAT_ERROR;
+		}
+		catch (IOException e) {
+			e.printStackTrace();
+			status = ErrorStatus.FILE_ERROR;
+		}
+		
 		setImageDocument(svgDoc);
 	}
 	
 	/**
-	 * @return the handler
+	 * @param parent The complex observation that text annotations should belong to
+	 * @param userUuid The uuid of the user creating, changing, voiding et c.
+	 * @param locUuid The uuid of the location current actions are being done at
+	 * @param encUuid The encounter uuid being referenced (used for creating new obs)
+	 * @return the annotations
 	 */
-	public DrawingHandler getHandler() {
-		return handler;
+	public void storeAnnotations(DrawingUtil.IHandleTextAnnObsStorage storage) {
+		
+		//get all text elements
+		org.w3c.dom.NodeList textElements = svgDoc.getElementsByTagName("text");
+		
+		//create ImageAnnotation objs from element details
+		List<Node> annotationList = new ArrayList<Node>(textElements.getLength());
+		
+		//NodeList is not an iterable
+		for (Integer i = 0; i < textElements.getLength(); i++) {
+			Node elem = textElements.item(i);
+			NamedNodeMap attr = elem.getAttributes();
+			
+			Node obsIdAttr = attr.getNamedItem("data-obsid");
+			
+			Node statusAttr = attr.getNamedItem("data-status");
+			
+			String text = elem.getTextContent();
+			
+			String status = "new";
+			if (statusAttr != null) {
+				statusAttr.getNodeValue();
+			}
+			
+			//if there is a data-obsid attr, i.e. it's not a new annotation
+			String obsId = null;
+			
+			if (obsIdAttr != null) {
+				
+				obsId = obsIdAttr.getNodeValue();
+				
+				switch (status) {
+					case "changed":
+						storage.updateObs(obsId, text);
+						break;
+					case "voided":
+						Node reasonAttr = attr.getNamedItem("voidReason");
+						
+						String reason = "Reason not provided";
+						if (reasonAttr != null) {
+							reason = reasonAttr.getNodeValue();
+						}
+						
+						storage.voidObs(obsId, reason);
+						break;
+					default:
+						break;
+				}
+				
+			} else {
+				String obsUuid = storage.newObs(text);
+				((Element) elem).setAttribute("data-obsid", obsUuid);
+			}
+			
+		}
+		
 	}
 	
 	/**
-	 * @param handler the handler to set
+	 * @param annotationList the annotations from the db, mapping obsId:annotationText
 	 */
-	public void setHandler(DrawingHandler handler) {
-		this.handler = handler;
+	public void populateAnnotations(Map<String, String> annotationMap) {
+		//this.annotations = annotations;
+		
+		//get all text elements
+		org.w3c.dom.NodeList textElements = svgDoc.getElementsByTagName("text");
+		
+		for (Integer i = 0; i < textElements.getLength(); i++) {
+			Node elem = textElements.item(i);
+			NamedNodeMap attr = elem.getAttributes();
+			
+			Node obsIdAttr = attr.getNamedItem("data-obsid");
+			
+			//if there is a data-obsid attr, i.e. it's not a new annotation
+			String obsId = null;
+			
+			if (obsIdAttr != null) {
+				obsId = obsIdAttr.getNodeValue();
+				
+				String text = annotationMap.get(obsId);
+				
+				//TODO handle tspans
+				
+				elem.setTextContent(text);
+				
+			}
+		}
+		
 	}
+	
 }

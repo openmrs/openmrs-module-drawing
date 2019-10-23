@@ -13,8 +13,16 @@
  */
 package org.openmrs.module.drawing;
 
+import java.util.Locale;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.openmrs.Concept;
+import org.openmrs.ConceptClass;
+import org.openmrs.ConceptDatatype;
+import org.openmrs.ConceptDescription;
+import org.openmrs.ConceptName;
+import org.openmrs.api.ConceptService;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.ModuleActivator;
 import org.openmrs.module.ModuleFactory;
@@ -58,8 +66,65 @@ public class DrawingActivator implements ModuleActivator {
 	 */
 	public void started() {
 		log.info("Drawing Module started");
-		if (ModuleFactory.isModuleStarted("htmlformentry")) {
+		
+		boolean hfesStarted = ModuleFactory.isModuleStarted("htmlformentry");
+		
+		ConceptService conceptService = Context.getConceptService();
+		
+		{
+			final String name = "SVG TEXT ANNOTATION";
+			final String desc = "Concept for 'SVG attachment' text annotation (used by drawing module)";
+			final String uuid = DrawingConstants.CONCEPT_SVG_TEXT_UUID;
+			
+			DrawingConstants.textAnnConcept = conceptService.getConceptByUuid(uuid);
+			
+			//if this concept does not yet exist in the db
+			if (null == DrawingConstants.textAnnConcept) {
+				
+				//create it
+				Concept textConcept = new Concept();
+				textConcept.setUuid(uuid);
+				ConceptName conceptName = new ConceptName(name, Locale.ENGLISH);
+				textConcept.setFullySpecifiedName(conceptName);
+				textConcept.setPreferredName(conceptName);
+				textConcept.setConceptClass(conceptService.getConceptClassByUuid(ConceptClass.QUESTION_UUID));
+				textConcept.setDatatype(conceptService.getConceptDatatypeByUuid(ConceptDatatype.TEXT_UUID));
+				textConcept.addDescription(new ConceptDescription(desc, Locale.ENGLISH));
+				
+				//store it
+				DrawingConstants.textAnnConcept = conceptService.saveConcept(textConcept);
+			}
+		}
+		
+		{
+			final String name = "SVG OBS GROUP";
+			final String desc = "Concept for grouping 'SVG attachment' complex obs and text annotations (used by drawing module)";
+			final String uuid = DrawingConstants.CONCEPT_SVG_GROUP_UUID;
+			
+			DrawingConstants.svgGroupConcept = conceptService.getConceptByUuid(uuid);
+			
+			//if this concept does not yet exist in the db
+			if (null == DrawingConstants.svgGroupConcept) {
+				
+				//create it
+				Concept groupConcept = new Concept();
+				groupConcept.setUuid(uuid);
+				ConceptName conceptName = new ConceptName(name, Locale.ENGLISH);
+				groupConcept.setFullySpecifiedName(conceptName);
+				groupConcept.setPreferredName(conceptName);
+				groupConcept.setConceptClass(conceptService.getConceptClassByUuid(ConceptClass.CONVSET_UUID));
+				groupConcept.setDatatype(conceptService.getConceptDatatypeByUuid(ConceptDatatype.N_A_UUID));
+				groupConcept.addDescription(new ConceptDescription(desc, Locale.ENGLISH));
+				
+				//store it
+				DrawingConstants.svgGroupConcept = conceptService.saveConcept(groupConcept);
+			}
+		}
+		
+		if (hfesStarted) {
 			try {
+				
+				//register CONCEPT_SVG_TEXT_GUID
 				
 				HtmlFormEntryService hfes = Context.getService(HtmlFormEntryService.class);
 				

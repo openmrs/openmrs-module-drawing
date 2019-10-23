@@ -13,6 +13,8 @@
  */
 package org.openmrs.module.drawing;
 
+import org.openmrs.Concept;
+
 /**
  *
  */
@@ -25,6 +27,16 @@ public class DrawingConstants {
 	public static final String BASE_COMPLEX_OBS_FILENAME = "drawingObs.svg";
 	
 	public static final String[] ACCEPTDEXTENSIONS = { "JPEG", "JPG", "PNG" };
+	
+	public static final String CONCEPT_SVG_TEXT_UUID = "2efa0742-aa8d-4968-b60e-a04106593e91";
+	
+	public static final String CONCEPT_SVG_UUID = "9aa54def-f952-471a-9e00-18e33de1556a";
+	
+	public static final String CONCEPT_SVG_GROUP_UUID = "b7ff2a6f-8632-4dc7-9792-44c8b2c1e65f";
+	
+	public static Concept textAnnConcept;
+	
+	public static Concept svgGroupConcept;
 	
 	private static final String VALID_USAGE_EXAMPLE_MSG = ", e.g. <drawing conceptId=\"<validComplexConceptIdentifier>\" id=\"<domInstanceUniqueId>\" displayMode=\"<[Annotation, Signature]>\"/>";
 	

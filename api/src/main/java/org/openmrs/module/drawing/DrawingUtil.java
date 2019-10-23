@@ -25,6 +25,7 @@ import java.io.UnsupportedEncodingException;
 import java.util.Scanner;
 
 import javax.imageio.ImageIO;
+
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -510,6 +511,18 @@ public class DrawingUtil {
 		File f = new File(getDrawingDirectory(), name);
 		Boolean deleted = f.exists() ? f.delete() : true;
 		return deleted;
+	}
+	
+	//this interface abstracts away whether these functions are called via the formentrysession
+	//or from a regular session opening the editor
+	public interface IHandleTextAnnObsStorage {
+		
+		//newObs return obsUuid
+		public String newObs(String text);
+		
+		public void updateObs(String existingObsUuid, String text);
+		
+		public void voidObs(String existingObsUuid, String reason);
 	}
 	
 	public static String translateLanguageKey(String key) {
