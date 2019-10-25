@@ -185,11 +185,11 @@ function updateSvgView(){
 
   //only expand the svg client area
   if(newWidth > pxToInt(rootSvg.style.width)) {
-  	rootSvg.style.width = newWidth+scrollbarWidth;
+  	rootSvg.style.width = Number(newWidth+scrollbarWidth).toString()+"px";
   }
   
   if(newHeight > pxToInt(rootSvg.style.height)) {
-  	rootSvg.style.height = newHeight+scrollbarHeight;
+  	rootSvg.style.height = Number(newHeight+scrollbarHeight).toString()+"px";
   }
   
   SVG("root-svg").size(rootSvg.style.width, rootSvg.style.height);
