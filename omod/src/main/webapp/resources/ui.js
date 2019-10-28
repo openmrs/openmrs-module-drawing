@@ -76,7 +76,7 @@ function extendPath(){
 function addExistingLayers(){
   let elementTypes = [
     "path",
-    "text",
+    "g",
     "line",
     "circle",
     "image"
@@ -92,11 +92,11 @@ function addExistingLayers(){
 
 SVG.on(document, 'DOMContentLoaded', function() {
 
-	calcScrollbarsizes();
+  calcScrollbarsizes();
 
   extendPath();
     
-  updateSvgView();
+  	updateSvgView();
 
 	var domInput = document.getElementById("svgDOM")
 	if( domInput != null && domInput.value !== "" ) {
@@ -111,11 +111,15 @@ SVG.on(document, 'DOMContentLoaded', function() {
 		//server (duplicate attribute)
 		root.removeAttribute("xmlns");
 		root.removeAttribute("xmlns:svgjs");
-    root.removeAttribute("xmlns:xlink");
+   	 	root.removeAttribute("xmlns:xlink");
     
-    //store the updated markup
-    updateSvgView();
+    	//store the updated markup
+    	updateSvgView();
 	}
+
+	//this helps determine how the elements in the svg are stored, e.g. group contains marker and group with text and background
+	//which could change over time and need to be handled in a different way in e.g. addLayer()
+	document.getElementById("root-svg").setAttribute("data-svg-element-structure-version", "1");
 
     drawing = SVG("root-svg").size("100%", "100%");
 
@@ -299,6 +303,7 @@ function addLayer(svgElement){
                       elem.addEventListener("click", (event)=>{
                         //console.log(event);
                         if (event.currentTarget.firstElementChild.checked) {
+                          svgTarget = getSelectableElement(svgTarget, true);
                           selectElement(svgTarget, true);
                         } else {
                           //this needs another arg to "deselect" to support multi-select correctly
@@ -315,7 +320,7 @@ function addLayer(svgElement){
                 },
                 { 
                   type: "txt",
-                  value: svgElement.type.charAt(0).toUpperCase() + svgElement.type.substr(1),
+                  value: svgElement.type.charAt(0) !== "g" ? svgElement.type.charAt(0).toUpperCase() + svgElement.type.substr(1) : "Text",
                   func: function (){}
                 },
                 {
@@ -402,8 +407,18 @@ function selectElement(elem, allowDefault){
       return false;
 	}
 
-	    //check if this element has a visual layer
-    var layerInfo = document.querySelector("#" + elem.id + "-layer-info");
+	//if this is text, it's associated group will be in the layer list
+	//this will still create the selection based on the text, but 
+	//the group is required for the layer info
+	
+	var layerElem = elem;
+	
+	if(elem.type = "text") {
+		layerElem = elem.parent().parent();	
+	}
+
+	//check if this element has a visual layer
+    var layerInfo = document.querySelector("#" + layerElem.id + "-layer-info");
 
     //if it doesn't, we won't select it
     if(layerInfo === null) {
@@ -454,7 +469,9 @@ function setTextSelectableState(selectable){
 function getSelectableElement(elem, returnSVG){
   elem = SVG.get(elem.id);
 
-  if(elem.type === "rect") {
+  if(elem.type === "g"){
+  	elem = elem.node.getElementsByTagName("text")[0];
+  } else if(elem.type === "rect") {
                       //selecting an already selected element
     elem = selectedElements.filter((elemEntry)=>elemEntry.selectRect===elem)[0].elem;
 
@@ -579,8 +596,12 @@ function pxToInt(str) {
 function createTextGroup(text, fontSize, x, y){
   var baseGroup = drawing.group();
 
-  baseGroup.translate(x, y);
-  baseGroup.use("pin-icon").scale(0.25, 0.25);
+  //baseGroup.translate(x, y);
+  baseGroup
+  	.use("pin-icon")
+  	.attr("x", x)
+    .attr("y", y)
+    .scale(0.25, 0.25);
 
   //create a second child group to make it easier to change the visibility
   var group = baseGroup.group();
@@ -588,11 +609,11 @@ function createTextGroup(text, fontSize, x, y){
   //add background rect
   group
     .rect(0, 0, "100%", "100%")
+    .attr("x", x)
+    .attr("y", y)
     .attr("fill", "white")
     .attr("stroke", "black")
     .radius(15)
-    .attr("x", x)
-    .attr("y", y)
     .attr("visibility", "inherit");
 
   //add the specific text

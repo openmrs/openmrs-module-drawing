@@ -22,12 +22,12 @@ import org.openmrs.ConceptClass;
 import org.openmrs.ConceptDatatype;
 import org.openmrs.ConceptDescription;
 import org.openmrs.ConceptName;
+import org.openmrs.ConceptNumeric;
 import org.openmrs.api.ConceptService;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.ModuleActivator;
 import org.openmrs.module.ModuleFactory;
 import org.openmrs.module.drawing.handlers.DrawingTagHandler;
-import org.openmrs.module.drawing.DrawingConstants;
 import org.openmrs.module.htmlformentry.HtmlFormEntryService;
 
 /**
@@ -40,6 +40,7 @@ public class DrawingActivator implements ModuleActivator {
 	/**
 	 * @see ModuleActivator#willRefreshContext()
 	 */
+	@Override
 	public void willRefreshContext() {
 		log.info("Refreshing Drawing Module");
 		
@@ -48,6 +49,7 @@ public class DrawingActivator implements ModuleActivator {
 	/**
 	 * @see ModuleActivator#contextRefreshed()
 	 */
+	@Override
 	public void contextRefreshed() {
 		log.info("Drawing Module refreshed");
 		
@@ -56,6 +58,7 @@ public class DrawingActivator implements ModuleActivator {
 	/**
 	 * @see ModuleActivator#willStart()
 	 */
+	@Override
 	public void willStart() {
 		log.info("Starting Drawing Module");
 		
@@ -64,6 +67,7 @@ public class DrawingActivator implements ModuleActivator {
 	/**
 	 * @see ModuleActivator#started()
 	 */
+	@Override
 	public void started() {
 		log.info("Drawing Module started");
 		
@@ -121,6 +125,33 @@ public class DrawingActivator implements ModuleActivator {
 			}
 		}
 		
+		{
+			final String name = "DRAWING OBS VERSION";
+			final String desc = "Concept for version of drawing module obs version and structure";
+			final String uuid = DrawingConstants.CONCEPT_DRAWING_VERSION_UUID;
+			
+			DrawingConstants.drawingModuleVersionConcept = conceptService.getConceptByUuid(uuid);
+			
+			//if this concept does not yet exist in the db
+			if (null == DrawingConstants.drawingModuleVersionConcept) {
+				
+				//create it
+				ConceptNumeric versionConcept = new ConceptNumeric();
+				versionConcept.setUuid(uuid);
+				ConceptName conceptName = new ConceptName(name, Locale.ENGLISH);
+				versionConcept.setFullySpecifiedName(conceptName);
+				versionConcept.setPreferredName(conceptName);
+				versionConcept.setConceptClass(conceptService.getConceptClassByUuid(ConceptClass.QUESTION_UUID));
+				//this version doesnt have to directly reflect the module version, just new information or incompatibilities in the obs structure
+				versionConcept.setDatatype(conceptService.getConceptDatatypeByUuid(ConceptDatatype.NUMERIC_UUID));
+				versionConcept.setAllowDecimal(true);
+				versionConcept.addDescription(new ConceptDescription(desc, Locale.ENGLISH));
+				
+				//store it
+				DrawingConstants.drawingModuleVersionConcept = conceptService.saveConcept(versionConcept);
+			}
+		}
+		
 		if (hfesStarted) {
 			try {
 				
@@ -144,6 +175,7 @@ public class DrawingActivator implements ModuleActivator {
 	/**
 	 * @see ModuleActivator#willStop()
 	 */
+	@Override
 	public void willStop() {
 		log.info("Stopping Drawing Module");
 	}
@@ -151,6 +183,7 @@ public class DrawingActivator implements ModuleActivator {
 	/**
 	 * @see ModuleActivator#stopped()
 	 */
+	@Override
 	public void stopped() {
 		log.info("Drawing Module stopped");
 	}

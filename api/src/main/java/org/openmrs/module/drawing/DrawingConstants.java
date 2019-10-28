@@ -34,9 +34,13 @@ public class DrawingConstants {
 	
 	public static final String CONCEPT_SVG_GROUP_UUID = "b7ff2a6f-8632-4dc7-9792-44c8b2c1e65f";
 	
+	public static final String CONCEPT_DRAWING_VERSION_UUID = "6dce5e8e-c61b-42b1-8c63-f8539e2750a5";
+	
 	public static Concept textAnnConcept;
 	
 	public static Concept svgGroupConcept;
+	
+	public static Concept drawingModuleVersionConcept;
 	
 	private static final String VALID_USAGE_EXAMPLE_MSG = ", e.g. <drawing conceptId=\"<validComplexConceptIdentifier>\" id=\"<domInstanceUniqueId>\" displayMode=\"<[Annotation, Signature]>\"/>";
 	
@@ -68,4 +72,5 @@ public class DrawingConstants {
 	//( e.g. web/module/resources/SVG.html )
 	public static final String EDITOR_HTML_PATH = DrawingUtil.getServerResourcesPath(DrawingConstants.RELATIVE_HTML_PATH);
 	
+	public static final Double INTERNAL_OBS_VERSION = 1.0;
 }

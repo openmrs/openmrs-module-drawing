@@ -62,12 +62,10 @@
 }
 
 .view-div {
-	display: inline-flex;
     border: solid black .1em;
     padding-right: .5em;
-    height: 80%;
-    width: 80%;
     overflow: scroll;
+    flex-shrink: 0;
 }
 
 .layer-div {

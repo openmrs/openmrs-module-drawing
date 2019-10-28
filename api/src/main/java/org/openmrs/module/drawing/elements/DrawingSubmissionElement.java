@@ -349,6 +349,15 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 				newObs[0].setPreviousVersion(parentObs);
 				
 			} else {
+				
+				//this is the first version of this module that supports versioning,
+				//so it will note this is the "1st version"... this version
+				//does not directly map to the module version and may not change with
+				//subsequent module versions, but could if more information is added, removed
+				//or how the information is stored changes
+				actions.createObs(DrawingConstants.drawingModuleVersionConcept, DrawingConstants.INTERNAL_OBS_VERSION, null,
+				    null);
+				
 				svgGroupObs = new Obs(session.getPatient(), DrawingConstants.svgGroupConcept, date, null);
 				
 				//actions.createObs(DrawingConstants.svgGroupConcept, null, date, null);
@@ -415,8 +424,6 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		if (svgWidgetTemplate != null) {
 			Element rootSvg = DrawingUtil.getElementById("root-svg", svgWidgetTemplate);
 			
-			rootSvg.setAttribute("data-default-tool", defaultTool);
-			
 			//TODO patch up widgetTemplate using DOM methods
 			//1. make all ids (hopefully) unique (html form entry unique id?)
 			//2. handle different classes (e.g. signature vs. annotated image)
@@ -442,11 +449,13 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 				
 				//in view mode, disable interaction
 				if (ctxMode == Mode.VIEW) {
+					
+					//in view mode only allow select
+					defaultTool = "select-tool";
+					
 					//set disabled on all buttons
 					
-					//set css pointer-events to none on root-svg
-					String rootClasses = rootSvg.getAttribute("class");
-					rootSvg.setAttribute("class", rootClasses + " disabledPointerEvents");
+					rootSvg.getAttribute("class");
 					
 					NodeList buttons = svgWidgetTemplate.getElementsByTagName("button");
 					//Element clearAllButton = svgWidgetTemplate.getElementById("");
@@ -455,7 +464,7 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 						
 						Element button = (Element) buttons.item(i);
 						
-						addClasses(button, "hidden");
+						addClasses(button, "hidden disabled");
 						
 					}
 					
@@ -480,6 +489,8 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 				}
 				
 			}
+			
+			rootSvg.setAttribute("data-default-tool", defaultTool);
 			
 			//these elements will be used to set explicit heights or visiblity for
 			//different purposes

@@ -34,6 +34,7 @@ import org.openmrs.ConceptComplex;
 import org.openmrs.ConceptDatatype;
 import org.openmrs.ConceptDescription;
 import org.openmrs.ConceptName;
+import org.openmrs.ConceptNumeric;
 import org.openmrs.Encounter;
 import org.openmrs.Obs;
 import org.openmrs.api.ConceptService;
@@ -238,6 +239,8 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 			complexConceptId = complexConcept.getId();
 		}
 		
+		//the 2 following concepts are taken from the activator, but
+		//modified to work with the minimal h2 database
 		{
 			final String name = "SVG OBS GROUP";
 			final String desc = "Concept for grouping 'SVG attachment' complex obs and text annotations (used by drawing module)";
@@ -260,6 +263,33 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 				
 				//store it
 				DrawingConstants.svgGroupConcept = conceptService.saveConcept(groupConcept);
+			}
+		}
+		
+		{
+			final String name = "DRAWING OBS VERSION";
+			final String desc = "Concept for version of drawing module obs version and structure";
+			final String uuid = DrawingConstants.CONCEPT_DRAWING_VERSION_UUID;
+			
+			DrawingConstants.drawingModuleVersionConcept = conceptService.getConceptByUuid(uuid);
+			
+			//if this concept does not yet exist in the db
+			if (null == DrawingConstants.drawingModuleVersionConcept) {
+				
+				//create it
+				ConceptNumeric versionConcept = new ConceptNumeric();
+				versionConcept.setUuid(uuid);
+				ConceptName conceptName = new ConceptName(name, Locale.ENGLISH);
+				versionConcept.setFullySpecifiedName(conceptName);
+				versionConcept.setPreferredName(conceptName);
+				versionConcept.setConceptClass(conceptService.getConceptClassByName("Question"));
+				//this version doesnt have to directly reflect the module version, just new information or incompatibilities in the obs structure
+				versionConcept.setDatatype(conceptService.getConceptDatatypeByUuid(ConceptDatatype.NUMERIC_UUID));
+				versionConcept.setAllowDecimal(true);
+				versionConcept.addDescription(new ConceptDescription(desc, Locale.ENGLISH));
+				
+				//store it
+				DrawingConstants.drawingModuleVersionConcept = conceptService.saveConcept(versionConcept);
 			}
 		}
 	}
@@ -1493,8 +1523,8 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 				//verify the file was created
 				results.assertEncounterCreated();
 				
-				//creates both complex obs and grouping obs
-				results.assertObsCreatedCount(2);
+				//creates complex obs, grouping obs and version obs
+				results.assertObsCreatedCount(3);
 				Encounter enc = results.getEncounterCreated();
 				
 				Set<Obs> allObs = enc.getAllObs();
@@ -1590,8 +1620,8 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 					fail("There were validation errors: " + results.getValidationErrors().toString());
 				}
 				
-				//complex obs and grouping obs
-				results.assertObsCreatedCount(2);
+				//complex obs, grouping obs, version obs
+				results.assertObsCreatedCount(3);
 				
 				for (Obs obs : editEncounter.getAllObs()) {
 					
