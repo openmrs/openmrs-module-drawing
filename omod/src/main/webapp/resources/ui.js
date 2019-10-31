@@ -73,41 +73,62 @@ function extendPath(){
 
 }
 
+function addExistingLayers(){
+  let elementTypes = [
+    "path",
+    "g",
+    "line",
+    "circle",
+    "image"
+  ];
+
+  var rootSvg = document.getElementById("root-svg");
+	for(child of rootSvg.children){
+    if(elementTypes.includes(child.nodeName) && child.getAttribute("data-ignore-layer")!="true"){
+      addLayer(SVG.get(child.id));
+    }
+  }
+}
+
 SVG.on(document, 'DOMContentLoaded', function() {
 
-	calcScrollbarsizes();
+  calcScrollbarsizes();
 
-    extendPath();
+  extendPath();
+    
+  	updateSvgView();
 
-	//this will fix 
 	var domInput = document.getElementById("svgDOM")
 	if( domInput != null && domInput.value !== "" ) {
 		var svgParentNode = document.getElementById("svg-container-div");
 		
 		//escape and unescape are deprecated
 		svgParentNode.innerHTML = unescape(domInput.value);
+		var root = document.getElementById("root-svg");
+		
+		//SVG will readd these namespace attributes, it doesnt check if they
+		//already exist, which leads to an error when it is sent back to the
+		//server (duplicate attribute)
+		root.removeAttribute("xmlns");
+		root.removeAttribute("xmlns:svgjs");
+   	 	root.removeAttribute("xmlns:xlink");
+    
+    	//store the updated markup
+    	updateSvgView();
 	}
 
-	var root = document.getElementById("root-svg");
-	
-	//SVG will readd these namespace attributes, it doesnt check if they
-	//already exist, which leads to an error when it is sent back to the
-	//server (duplicate attribute)
-	root.removeAttribute("xmlns");
-	root.removeAttribute("xmlns:svgjs");
-	root.removeAttribute("xmlns:xlink");
-
-	//calling this here stores the fixed svgDOM with two xmlns:svgjs's in the input value
-    updateSvgView();
+	//this helps determine how the elements in the svg are stored, e.g. group contains marker and group with text and background
+	//which could change over time and need to be handled in a different way in e.g. addLayer()
+	document.getElementById("root-svg").setAttribute("data-svg-element-structure-version", "1");
 
     drawing = SVG("root-svg").size("100%", "100%");
 
     toolMap["draw"]["select-tool"] = document.getElementById("select-tool");
     toolMap["draw"]["text-tool"] = document.getElementById("text-tool");
     toolMap["draw"]["path-tool"] = document.getElementById("path-tool");
-	toolMap["draw"]["line-tool"] = document.getElementById("line-tool");
+	  toolMap["draw"]["line-tool"] = document.getElementById("line-tool");
     toolMap["draw"]["circle-tool"] = document.getElementById("circle-tool");
-	toolMap["draw"]["layer-info-vis-toggle"] = document.getElementById("layer-info-vis-toggle");
+	  toolMap["draw"]["layer-info-vis-toggle"] = document.getElementById("layer-info-vis-toggle");
     /*toolMap["draw"]["poly-tool"] = document.getElementById("poly-tool");*/
 
     toolMap["layer"]["edit-tool"] = document.getElementById("edit-tool");
@@ -118,9 +139,26 @@ SVG.on(document, 'DOMContentLoaded', function() {
     toolMap["layer"]["send-to-back-tool"] = document.getElementById("send-to-back-tool");
     toolMap["layer"]["void-tool"] = document.getElementById("void-tool");
     toolMap["layer"]["delete-tool"] = document.getElementById("delete-tool");
-	
-    setPathTool();
-    
+  
+    var rootSvg = document.getElementById("root-svg");
+
+    //supports selecting the default tool, generally path for signatures
+    switch(rootSvg.getAttribute("data-default-tool")){
+      
+      case "select-tool":
+        setSelectTool();
+        break;
+
+      case "text-tool":
+        setTextTool();
+        break;
+
+      default:
+      case "path-tool":
+          setPathTool();
+          break;
+    }
+
     drawing.on('mousedown', function(e){
         //console.log("mousedown occurred, tool is ", tool);
 
@@ -134,14 +172,9 @@ SVG.on(document, 'DOMContentLoaded', function() {
         tool.draw('stop', e);
         
         updateSvgView();
-    }, false);
+    }, false);    
 
-//hacky uhg, overflow scroll won't work in flexbox without a fixed height?
-//    var height = document.querySelector("#root-svg").clientHeight;
-//    document.querySelector(".layer-div").style.height = height;
-//    document.querySelector("#root-svg").style.height = height;
-    
-
+	addExistingLayers();
 });
 
 function updateSvgView(){
@@ -156,11 +189,11 @@ function updateSvgView(){
 
   //only expand the svg client area
   if(newWidth > pxToInt(rootSvg.style.width)) {
-  	rootSvg.style.width = newWidth+scrollbarWidth;
+  	rootSvg.style.width = Number(newWidth+scrollbarWidth).toString()+"px";
   }
   
   if(newHeight > pxToInt(rootSvg.style.height)) {
-  	rootSvg.style.height = newHeight+scrollbarHeight;
+  	rootSvg.style.height = Number(newHeight+scrollbarHeight).toString()+"px";
   }
   
   SVG("root-svg").size(rootSvg.style.width, rootSvg.style.height);
@@ -216,8 +249,19 @@ function setToggle(buttonId, exclusiveGroup) {
   var button = document.getElementById(buttonId);
 
   //TODO evaluate layer UX
-  //breaks current move functionality
-  //selectElement(document.getElementById("root-svg"));
+  //if this is not a type of layer operation
+  if(exclusiveGroup !== "layer") {  	
+    //deselect any selected elements
+    selectElement(document.getElementById("root-svg"));
+  }
+  
+    //remove highlighting if it exists, if setting select tool, it will be re-added
+    var highlightStyle = document.getElementById("highlight-style");
+    
+    if(highlightStyle!==null) {
+      highlightStyle.remove();
+    }
+  
 
   //if this button is a normal toggle, just toggle it
   if(exclusiveGroup===undefined && button.hasAttribute("aria-pressed")){
@@ -259,6 +303,7 @@ function addLayer(svgElement){
                       elem.addEventListener("click", (event)=>{
                         //console.log(event);
                         if (event.currentTarget.firstElementChild.checked) {
+                          svgTarget = getSelectableElement(svgTarget, true);
                           selectElement(svgTarget, true);
                         } else {
                           //this needs another arg to "deselect" to support multi-select correctly
@@ -275,7 +320,7 @@ function addLayer(svgElement){
                 },
                 { 
                   type: "txt",
-                  value: svgElement.type.charAt(0).toUpperCase() + svgElement.type.substr(1),
+                  value: svgElement.type.charAt(0) !== "g" ? svgElement.type.charAt(0).toUpperCase() + svgElement.type.substr(1) : "Text",
                   func: function (){}
                 },
                 {
@@ -362,8 +407,18 @@ function selectElement(elem, allowDefault){
       return false;
 	}
 
-	    //check if this element has a visual layer
-    var layerInfo = document.querySelector("#" + elem.id + "-layer-info");
+	//if this is text, it's associated group will be in the layer list
+	//this will still create the selection based on the text, but 
+	//the group is required for the layer info
+	
+	var layerElem = elem;
+	
+	if(elem.nodeName == "text") {
+		layerElem = elem.parentNode.parentNode;	
+	}
+
+	//check if this element has a visual layer
+    var layerInfo = document.querySelector("#" + layerElem.id + "-layer-info");
 
     //if it doesn't, we won't select it
     if(layerInfo === null) {
@@ -371,19 +426,28 @@ function selectElement(elem, allowDefault){
     }
 	  
     var bbox = elem.getBBox();
+    var padding = 10;
     //should replace hardcoded "padding" (+10, -5) with em conversions
-    var selectRect = drawing.rect(bbox.width+10, bbox.height+10);
-      
+    var selectRect = drawing.rect(bbox.width+padding, bbox.height+padding);
+
+    if(layerElem.nodeName === "g") {
+      var childGroupCollection = layerElem.getElementsByTagName("g");
+      if(childGroupCollection.length > 0 ){
+        var childGroup = childGroupCollection[0];
+        childGroup.setAttribute("visibility", "visible");
+      }
+    }
+
     selectRect
-      .attr("x", bbox.x-5)
-      .attr("y", bbox.y-5)
+      .attr("x", bbox.x-padding/2)
+      .attr("y", bbox.y-padding/2)
       .attr("class", "selectedElement")
       .attr("stroke", "black")
       //for cursors (e.g. move) to work inside open figures, there must be a fill, but it can be completely transparent
       .attr("fill", "grey")
       .attr("fill-opacity", "0");
     
-    selectedElements.push({"elem": elem , "selectRect":selectRect});
+    selectedElements.push({"elem": layerElem , "selectRect":selectRect});
 
     if(selectedElements.length > 1){
         setEnabledStates(document.querySelectorAll(".layer-button"), {"edit-tool": false, "send-to-front-tool": false, "send-to-back-tool":false});
@@ -395,7 +459,7 @@ function selectElement(elem, allowDefault){
     //void-tool value should be determined based on the presence of data-obsid
     setEnabledStates(document.querySelectorAll(".layer-button"), {"void-tool":false});
 
-    var selectedCheckbox = document.querySelector("#" + elem.id + "-layer-info input[type='checkbox']");
+    var selectedCheckbox = document.querySelector("#" + layerElem.id + "-layer-info input[type='checkbox']");
     selectedCheckbox.checked = true;
 	
 	return true;
@@ -414,7 +478,27 @@ function setTextSelectableState(selectable){
 function getSelectableElement(elem, returnSVG){
   elem = SVG.get(elem.id);
 
-  if(elem.type === "rect") {
+  //check if SVG was able to "get" an SVG.Element for the DOM element/node passed in
+  if(elem === null){
+    console.log("SVG.js was not able to get an SVG.Element for the specified node")
+    return;
+  }
+
+
+  //select the whole group, since move will move all of it
+  if(elem.type === "g"){
+    
+    //if there's no layer info, select the parent group instead
+    if(document.querySelector("#"+ elem.id() +"-layer-info") == undefined){
+      elem = elem.node.parentNode;
+    }
+    
+    //elem = elem.node.getElementsByTagName("text")[0];
+  } else if(elem.type === "use") {
+    //select the entire parent <g> node
+    elem = elem.node.parentNode;
+    //.getElementsByTagName("text")[0];
+  } else if(elem.type === "rect") {
                       //selecting an already selected element
     elem = selectedElements.filter((elemEntry)=>elemEntry.selectRect===elem)[0].elem;
 
@@ -425,7 +509,7 @@ function getSelectableElement(elem, returnSVG){
       elem = document.querySelector("#"+elem.id());
   }
 
-  if(returnSVG){
+  if(returnSVG && !(elem instanceof SVG.Element)) {
       elem = SVG.get(elem.id);
   }
 
@@ -434,6 +518,19 @@ function getSelectableElement(elem, returnSVG){
 
 function setSelectTool(event){
   setToggle("select-tool", "draw");
+
+  //https://www.w3.org/wiki/Dynamic_style_-_manipulating_CSS_with_JavaScript
+
+  //a style to highlight which svg element should be selected when clicking
+  //this is applied when entering and should be removed when exiting select mode
+  //as it can be distracting if it were always on
+  var highlightOverRule = "svg *:hover { filter: url(#dropshadow); }";
+  
+  var highlightStyle = document.createElement("style");
+  highlightStyle.setAttribute("id", "highlight-style");
+  highlightStyle.innerHTML = highlightOverRule;
+  
+  document.body.appendChild(highlightStyle);
 
   tool = {
             draw: function(eOrMsg, e){
@@ -523,6 +620,57 @@ function pxToInt(str) {
     return res;
 }
 
+function createTextGroup(text, fontSize, x, y){
+  var baseGroup = drawing.group();
+
+  //baseGroup.translate(x, y);
+  baseGroup
+  	.use("pin-icon")
+    .attr("x", x)
+    .attr("y", y)
+    .scale(0.25, 0.25, x, y);
+
+  //create a second child group to make it easier to change the visibility
+  var group = baseGroup.group();
+
+  var padding = 5;
+
+  //add the specific text
+  var text = group
+    .text(text)
+    .attr("stroke","black")
+    .attr("stroke-width",.5)
+    .attr("fill","black")
+    .font("size", fontSize)
+    .attr("visibility", "inherit");
+
+  var bounds = text.node.getBBox();
+  
+  var childGroupElementsY = y-bounds.height-padding;
+
+  //after it's been inserted, and the bounds calculated, adjust position so it doesnt overlap the marker
+  text
+    .attr("x", x)
+    .attr("y", childGroupElementsY);
+
+  //add background rect so text is readable over whatever is behind it, subs another padding factor so text is "centered"
+  group
+    .rect(bounds.width+padding*2, bounds.height+padding*2)
+    .attr("x", x-padding)
+    .attr("y", childGroupElementsY-padding/2)
+    .attr("fill", "white")
+    .attr("stroke", "black")
+    .radius(5)
+    .attr("visibility", "inherit");
+
+    //move the text infront of the background, it had to be created first for the bbox, but must be rendered after
+    text.forward();
+
+    group.attr("visibility", "collapse");
+
+  return baseGroup;
+}
+
 function createText(){
   
   var textareaPopup = document.getElementById("textarea-popup");
@@ -534,7 +682,7 @@ function createText(){
   var parentOffsetX = rootSvgBBox.left;
   var parentOffsetY = rootSvgBBox.top;
   //console.log(parentOffsetX, parentOffsetY, rootSvg);
-  
+
   var y = pxToInt(textareaPopup.style.top) - parentOffsetY;
   var x = pxToInt(textareaPopup.style.left) - parentOffsetX;
 
@@ -543,16 +691,9 @@ function createText(){
   	fontSize = "1em";
   }
 
-  var textElement = drawing
-  						.text(text)
-  						.attr("x", x)
-  						.attr("y", y)
-  						.attr("stroke","black")
-  						.attr("stroke-width",.5)
-  						.attr("fill","black")
-  						.font("size", fontSize);
-
-  addLayer(textElement);
+  var textGroup = createTextGroup(text, fontSize, x, y);
+  
+  addLayer(textGroup);
 
   //remove and select new area after adding layer so selection in layer list is updated
   if(mode==="edit") {
@@ -560,7 +701,10 @@ function createText(){
 
       removeElement(SVG.get(origId));
 
-      selectElement(textElement.node);
+      //var elemToSelect = getSelectableElement(textGroup.node);
+
+      //selectElement(elemToSelect);
+      selectElement(textGroup.node);
   }
 
   resetTextarea();
@@ -622,17 +766,20 @@ function clearAll(){
 function storeSVG(){
 	
 	//deep clone the svg node in case a selection rect needs to be removed from it
-	var domClone = document.getElementById("svg-container-div").cloneNode(true);
-	
+  var domClone = document.implementation.createHTMLDocument("");
+  var node = domClone.importNode(document.getElementById("svg-container-div"), true);
+  
+  domClone.body.appendChild(node);
+
 	if( selectedElements.length > 0 ) {
 		selectedElements
 			.forEach( function(selectionInfo) {
-				var clonedSelecRect = domClone.getElementById(selectionInfo.selectRect.id);
-				clonedSelectRect.remove();
+				  var clonedSelectRect = domClone.getElementById(selectionInfo.selectRect.id());
+				  clonedSelectRect.remove();
 			} )
 	}
 	
-	var svgMarkup = domClone.innerHTML;
+	var svgMarkup = domClone.getElementById("svg-container-div").innerHTML;
 	var svgDOMInput = document.getElementById("svgDOM");
 
     svgDOMInput.value = svgMarkup;
@@ -652,9 +799,9 @@ function gatherText(elem) {
 
   var text = "";
 
-  var len = elem.node.children;
+  var len = elem.children;
 
-  Array.from(elem.node.children).forEach((child, i)=>{
+  Array.from(elem.children).forEach((child, i)=>{
       text += child.textContent 
       
       if(i+1<len){
@@ -687,14 +834,20 @@ function setEditTool(){
                 var svgElem = getSelectableElement(firstElem.elem, true);
 
                 switch(svgElem.type) {
-                    case "text":
+                    case "g":
                         var svgRoot = document.getElementById("root-svg");
                         var svgRootBBox = svgRoot.getBoundingClientRect();
-                        var text = gatherText(svgElem);
+                        var text = gatherText(svgElem.node.getElementsByTagName("text")[0]);
                         //console.log(svgRootBBox.x, svgRootBBox.y);
                         var textareaPopup = document.querySelector("#textarea-popup");
-                        textareaPopup.setAttribute("data-id", svgElem.id());
-                        showTextPopup(svgElem.attr("x")+svgRootBBox.x, svgElem.attr("y")+svgRootBBox.y, "edit", text);
+                        //store the top parent <g> group
+                        var parentGroup = svgElem.node;
+
+                        textareaPopup.setAttribute("data-id", parentGroup.id);
+                        //get marker x,y since it is the original click positon
+                        var marker = parentGroup.getElementsByTagName("use")[0];
+
+                        showTextPopup(Number(marker.getAttribute("x"))+svgRootBBox.x, Number(marker.getAttribute("y"))+svgRootBBox.y, "edit", text);
                         break;
 
                 }
@@ -743,10 +896,12 @@ function setMoveTool(){
 
                     selectedElements.forEach((elemEntry)=>{
                         
-                        var elem = SVG.get(elemEntry.elem.id);
+                        var elem = getSelectableElement(elemEntry.elem, true);
+
+                        //var elem = SVG.get(elemEntry.elem.id);
                         
                         //move up a tree if this is a child text span to get to the enclosing text element
-                        while (elem.type === "tspan") elem=elem.parent();
+                        //while (elem.type === "tspan") elem=elem.parent();
 
                         //instead, just get the bounding box
                         var pathBB = elem.node.getBBox();
@@ -868,6 +1023,34 @@ function selectTemplate(){
     var templatePopup = document.querySelector("#template-image-popup");
     templatePopup.style.display = "visible";
     //templatePopup
+}
+
+function layerSendToFront() {
+  selectedElements.forEach((selectEntry)=>{
+    SVG.get(selectEntry.elem.id).front();
+    selectEntry.selectRect.front();
+  });
+}
+
+function layerForward() {
+  selectedElements.forEach((selectEntry)=>{
+    SVG.get(selectEntry.elem.id).forward();
+    selectEntry.selectRect.forward();
+  });
+}
+
+function layerBackward() {
+  selectedElements.forEach((selectEntry)=>{
+    SVG.get(selectEntry.elem.id).backward();
+    selectEntry.selectRect.backward();
+  });
+}
+
+function layerSendToBack() {
+  selectedElements.forEach((selectEntry)=>{
+    SVG.get(selectEntry.elem.id).back();
+    selectEntry.selectRect.back();
+  });
 }
 
 document.querySelector("#load-image-file-input").addEventListener('change', function(e) {
