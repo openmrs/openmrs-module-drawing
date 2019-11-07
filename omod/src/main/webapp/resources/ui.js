@@ -1,6 +1,8 @@
 var drawing;
 var tool;
 
+var viewInitialized = false;
+
 var toolMap = {
   "draw" : {},
   "layer" : {}
@@ -96,31 +98,36 @@ SVG.on(document, 'DOMContentLoaded', function() {
 
   extendPath();
     
-  	updateSvgView();
+  updateSvgView();
 
-	var domInput = document.getElementById("svgDOM")
+  var root = document.getElementById("root-svg")
+  
+  //there is no error when trying to remove these if they dont exist, but guaranteed error saving if they're duplicated, so 
+  //make sure they're removed no matter what
+
+  //SVG will readd these namespace attributes, it doesnt check if they
+  //already exist, which leads to an error when it is sent back to the
+  //server (duplicate attribute)
+  root.removeAttribute("xmlns");
+  root.removeAttribute("xmlns:svgjs");
+  root.removeAttribute("xmlns:xlink");;
+  
+  var domInput = document.getElementById("svgDOM")
 	if( domInput != null && domInput.value !== "" ) {
 		var svgParentNode = document.getElementById("svg-container-div");
 		
 		//escape and unescape are deprecated
 		svgParentNode.innerHTML = unescape(domInput.value);
-		var root = document.getElementById("root-svg");
 		
-		//SVG will readd these namespace attributes, it doesnt check if they
-		//already exist, which leads to an error when it is sent back to the
-		//server (duplicate attribute)
-		root.removeAttribute("xmlns");
-		root.removeAttribute("xmlns:svgjs");
-   	 	root.removeAttribute("xmlns:xlink");
-    
-    	//store the updated markup
-    	updateSvgView();
+    //store the updated markup
+    updateSvgView();
 	}
 
 	//this helps determine how the elements in the svg are stored, e.g. group contains marker and group with text and background
 	//which could change over time and need to be handled in a different way in e.g. addLayer()
 	document.getElementById("root-svg").setAttribute("data-svg-element-structure-version", "1");
 
+    //this will set the xmlns attrs.
     drawing = SVG("root-svg").size("100%", "100%");
 
     toolMap["draw"]["select-tool"] = document.getElementById("select-tool");
@@ -137,7 +144,6 @@ SVG.on(document, 'DOMContentLoaded', function() {
     toolMap["layer"]["move-forward-tool"] = document.getElementById("move-forward-tool");
     toolMap["layer"]["move-backward-tool"] = document.getElementById("move-backward-tool");
     toolMap["layer"]["send-to-back-tool"] = document.getElementById("send-to-back-tool");
-    toolMap["layer"]["void-tool"] = document.getElementById("void-tool");
     toolMap["layer"]["delete-tool"] = document.getElementById("delete-tool");
   
     var rootSvg = document.getElementById("root-svg");
@@ -179,13 +185,47 @@ SVG.on(document, 'DOMContentLoaded', function() {
 
 function updateSvgView(){
   var rootSvg = document.getElementById("root-svg");
+  var background = SVG.get("background");
+
+  //store these in case the bbox init criteria are not met
+  var oldBackground = {
+    "x": background.x(),
+    "y": background.y(),
+    "width": background.attr("width"),
+    "height": background.attr("height")
+  };
+
+  //don't count the background rect size when getting the bbox
+  background.x(0).y(0).attr("width", 0).attr("height", 0);
+
   var newBounds = rootSvg.getBBox();
+  
+  //set these back in case of an early return
+  background.x(oldBackground.x).y(oldBackground.y).attr("width", oldBackground.width).attr("height", oldBackground.height);
+
+  //if collapsed, these are all 0, do no more work
+  if(newBounds.x == 0 && newBounds.y === 0 && newBounds.width === 0 && newBounds.height === 0) {
+    return;
+  }
 
   var clientWidth = rootSvg.parentElement.clientWidth;
   var clientHeight = rootSvg.parentElement.clientHeight;
 
-  var newWidth = Math.max(clientWidth, newBounds.width)-scrollbarWidth;
-  var newHeight = Math.max(clientHeight, newBounds.height)-scrollbarHeight;
+  var widthToUse = newBounds.width;
+  var heightToUse = newBounds.height;
+
+  // on the first usuable update (when a page is loaded or a collapsed accordian is opened), the fill height and width
+  // is required, but afterwards it must take account of possible negative viewport origin values or it will grow with every
+  // updateSvgView() call
+  // if(viewInitialized) {
+  //   widthToUse += newBounds.x;
+  //   heightToUse += newBounds.y;
+  // }
+  
+  viewInitialized = true;
+
+  var newWidth = Math.max(clientWidth, widthToUse)-scrollbarWidth;
+  var newHeight = Math.max(clientHeight, heightToUse)-scrollbarHeight;
 
   //only expand the svg client area
   if(newWidth > pxToInt(rootSvg.style.width)) {
@@ -195,9 +235,30 @@ function updateSvgView(){
   if(newHeight > pxToInt(rootSvg.style.height)) {
   	rootSvg.style.height = Number(newHeight+scrollbarHeight).toString()+"px";
   }
+
+  var viewBoxVals = [
+    newBounds.x,
+    newBounds.y,
+    newWidth+scrollbarWidth,
+    newHeight+scrollbarHeight
+  ];
+
+  var viewBoxString = viewBoxVals.join(" ");
+
+  if(newWidth > 0 && newHeight > 0) {
+
+    rootSvg.setAttribute("viewBox", viewBoxString);
+  }
   
-  SVG("root-svg").size(rootSvg.style.width, rootSvg.style.height);
-  
+  //if style is not currently set, don't set size to null, 0, "" et c.
+  if( rootSvg.style.width !== "" && rootSvg.style.height !== "") {
+    SVG("root-svg").size(rootSvg.style.width, rootSvg.style.height);
+    
+    var svgBackgroundRect = SVG.get("background");
+    if(svgBackgroundRect !== null) {
+      svgBackgroundRect.x(newBounds.x).y(newBounds.y).attr("width", rootSvg.style.width).attr("height", rootSvg.style.height);
+    }
+  }
   //store the current svg in the input
   storeSVG();
   
@@ -249,8 +310,8 @@ function setToggle(buttonId, exclusiveGroup) {
   var button = document.getElementById(buttonId);
 
   //TODO evaluate layer UX
-  //if this is not a type of layer operation
-  if(exclusiveGroup !== "layer") {  	
+  //if this is not a type of layer operation or if it's select select
+  if(exclusiveGroup !== "layer" && (buttonId !== "select-tool" || buttonId !== "layer-info-vis-toggle")) {  	
     //deselect any selected elements
     selectElement(document.getElementById("root-svg"));
   }
@@ -303,7 +364,8 @@ function addLayer(svgElement){
                       elem.addEventListener("click", (event)=>{
                         //console.log(event);
                         if (event.currentTarget.firstElementChild.checked) {
-                          svgTarget = getSelectableElement(svgTarget, true);
+                          //select element expects a normal html DOM element not an SVG.Element
+                          svgTarget = getSelectableElement(svgTarget);
                           selectElement(svgTarget, true);
                         } else {
                           //this needs another arg to "deselect" to support multi-select correctly
@@ -391,8 +453,16 @@ var selectedElements = [
 ];
 
 function selectElement(elem, allowDefault){
-    console.log(elem);
-    //adjust the type of selection behavior here, this is the default of remove select on all selected elements and select new element
+    
+  if(elem == null) {
+    console.log("selectElement was called with null, undefined or coerce-able value", new Error().stack);
+    return;
+  }
+    
+  
+  setEnabledStates(document.querySelectorAll(".layer-button"), false);
+
+  //adjust the type of selection behavior here, this is the default of remove select on all selected elements and select new element
 
     selectedElements.forEach((selectedInfo)=> {
         var selectedCheckbox = document.querySelector("#"+selectedInfo.elem.id+"-layer-info input[type='checkbox']");
@@ -449,15 +519,14 @@ function selectElement(elem, allowDefault){
     
     selectedElements.push({"elem": layerElem , "selectRect":selectRect});
 
+    setEnabledStates(document.querySelectorAll(".layer-button"), true);
+
     if(selectedElements.length > 1){
         setEnabledStates(document.querySelectorAll(".layer-button"), {"edit-tool": false, "send-to-front-tool": false, "send-to-back-tool":false});
     }
 
     if(allowDefault!==true)
       event.preventDefault();
-
-    //void-tool value should be determined based on the presence of data-obsid
-    setEnabledStates(document.querySelectorAll(".layer-button"), {"void-tool":false});
 
     var selectedCheckbox = document.querySelector("#" + layerElem.id + "-layer-info input[type='checkbox']");
     selectedCheckbox.checked = true;
@@ -476,14 +545,17 @@ function setTextSelectableState(selectable){
 }
 
 function getSelectableElement(elem, returnSVG){
-  elem = SVG.get(elem.id);
+  
+  if(! (elem instanceof SVG.Element)) {
+    var tmpElem = SVG.get(elem.id);
+    //check if SVG was able to "get" an SVG.Element for the DOM element/node passed in
+    if(tmpElem === null){
+      console.log("SVG.js was not able to get an SVG.Element for the specified node", elem);
+      return;
+    }
 
-  //check if SVG was able to "get" an SVG.Element for the DOM element/node passed in
-  if(elem === null){
-    console.log("SVG.js was not able to get an SVG.Element for the specified node")
-    return;
+    elem = tmpElem;
   }
-
 
   //select the whole group, since move will move all of it
   if(elem.type === "g"){
@@ -499,18 +571,41 @@ function getSelectableElement(elem, returnSVG){
     elem = elem.node.parentNode;
     //.getElementsByTagName("text")[0];
   } else if(elem.type === "rect") {
-                      //selecting an already selected element
-    elem = selectedElements.filter((elemEntry)=>elemEntry.selectRect===elem)[0].elem;
+    //selecting an already selected element
+    var selectRects = selectedElements.filter((elemEntry)=>elemEntry.selectRect===elem);
 
-  } else {
-      //move up a tree if this is a child text span to get to the enclosing text element
-      while (elem.type === "tspan") elem=elem.parent();
+    if(selectRects.length>0) {
+      //TODO this needs to be improved to support multiple selection
+      elem = selectRects[0].elem;
+    }
 
-      elem = document.querySelector("#"+elem.id());
+  }
+  
+  if(elem.type === "text" || elem.type === "tspan" || elem.type === "rect") {
+      
+      //move up a tree to possible parent g ("group") (or till it's no longer relevant)
+      while (elem instanceof SVG.Element && elem.type !== "g") elem=elem.parent();
+
+	    //make the next function param uniform between the two possible cases
+	    if( elem instanceof SVG.Element ) {
+        elem = elem.node 
+      }
+	  	
+      //this function expects the elem param to be the DOM element, not the SVG.Element
+      elem = getSelectableElement(elem, true);
+
+      if(elem !== null && elem instanceof SVG.Element) //SVG.element has method id(), DOM has member .id.... would be nice if they were the same...
+      	elem = document.querySelector("#"+elem.id());
+      	
+      //really should decide on an else to definitively determine result of this branch
   }
 
+  //if the caller needs an SVG element but this is not one, update to one if possible
   if(returnSVG && !(elem instanceof SVG.Element)) {
       elem = SVG.get(elem.id);
+  } else if (!returnSVG && elem instanceof SVG.Element) {
+  //if the caller needs a normal DOM element but this is an SVG element, return the inner node
+    elem = elem.node;
   }
 
   return elem;
@@ -524,7 +619,7 @@ function setSelectTool(event){
   //a style to highlight which svg element should be selected when clicking
   //this is applied when entering and should be removed when exiting select mode
   //as it can be distracting if it were always on
-  var highlightOverRule = "svg *:hover { filter: url(#dropshadow); }";
+  var highlightOverRule = "#root-svg *:hover:not(#background):not([data-ignore-layer=true]) { filter: url(#dropshadow); }";
   
   var highlightStyle = document.createElement("style");
   highlightStyle.setAttribute("id", "highlight-style");
@@ -628,7 +723,7 @@ function createTextGroup(text, fontSize, x, y){
   	.use("pin-icon")
     .attr("x", x)
     .attr("y", y)
-    .scale(0.25, 0.25, x, y);
+    .scale(0.25, x, y);
 
   //create a second child group to make it easier to change the visibility
   var group = baseGroup.group();
@@ -679,8 +774,8 @@ function createText(){
   var text = textarea.value;
   var rootSvg = document.getElementById("root-svg");
   var rootSvgBBox = rootSvg.getBoundingClientRect();
-  var parentOffsetX = rootSvgBBox.left;
-  var parentOffsetY = rootSvgBBox.top;
+  var parentOffsetX = rootSvgBBox.left - rootSvg.viewBox.baseVal.x;
+  var parentOffsetY = rootSvgBBox.top - rootSvg.viewBox.baseVal.y;
   //console.log(parentOffsetX, parentOffsetY, rootSvg);
 
   var y = pxToInt(textareaPopup.style.top) - parentOffsetY;
@@ -764,7 +859,15 @@ function clearAll(){
 }*/
 
 function storeSVG(){
-	
+  
+  //always make sure tspans have no x or y set as it overrides the parent <text> tag positioning
+  var allTspans = document.querySelectorAll("tspan");
+
+  allTspans.forEach(function(tspan){ 
+      tspan.removeAttribute("x");
+      tspan.removeAttribute("y");
+  });
+
 	//deep clone the svg node in case a selection rect needs to be removed from it
   var domClone = document.implementation.createHTMLDocument("");
   var node = domClone.importNode(document.getElementById("svg-container-div"), true);
@@ -870,6 +973,37 @@ function clipMove(delta, pointArray){
 
 }
 
+function descendTree(svgElem, apply, exceptTypes) {
+  
+  for(var childElem of svgElem.children()) {
+    if(childElem.children !== undefined) {
+      descendTree(childElem, apply, exceptTypes);
+    }
+    
+    //don't apply to specified types of nodes 
+    if(!exceptTypes.includes(childElem.type)) {
+      apply(childElem);
+    }
+  }
+
+}
+
+function applyDmove(includedElem, deltaX, deltaY) {
+                            
+  var transform = includedElem.transform();
+ 
+  //scale scaled elements back to fullsize, dmove and then reapply scale transform to get equal pixels
+  var prevX = includedElem.x();
+  var prevY = includedElem.y();
+
+  includedElem
+    .scale(1, 1, prevX, prevY)
+    .dx(deltaX)
+    .dy(deltaY)
+    .scale(transform.scaleX, transform.scaleY, prevX+deltaX, prevY+deltaY);
+
+}
+
 function setMoveTool(){
   setToggle("move-tool", "layer");
   selectedElements.forEach((selectEntry)=>{
@@ -911,11 +1045,24 @@ function setMoveTool(){
                         var prevY = pathBB.y;
 
                         //clip the movement to [(0,0), (\inf, \inf))
-                        deltaX = clipMove(deltaX, [prevX]);
-                        deltaY = clipMove(deltaY, [prevY]);
+                        //deltaX = clipMove(deltaX, [prevX]);
+                        //deltaY = clipMove(deltaY, [prevY]);
 
                         //use svg.js' dmove()
-                        elem.dmove(deltaX, deltaY);
+                        //g uses transform translate, which requires supporting an additional parsing and
+                        //x_i+translate(x_i) codepath, so instead translate all non-"g" children
+                        if(elem.type !== "g") {
+                          elem.dmove(deltaX, deltaY);
+                        } else {
+
+                          //create a closure to dmove child elements
+                          var applyFixedDmove = (elem) => {applyDmove(elem, deltaX, deltaY)};
+
+                          //descend tree applying the delta move to relevant elements
+                          descendTree(elem, applyFixedDmove, ["g", "tspan"]);
+
+                        }
+
 
                         elem = elemEntry.selectRect;
 
@@ -1009,7 +1156,7 @@ function setDeleteTool() {
 }
 
 function toggleLayerInfoVis(){
-  setToggle("layer-info-vis-toggle");
+  setToggle("layer-info-vis-toggle", "layer");
 
   var layerPanel = document.querySelector("#arrange");
   if(layerPanel.classList.contains("reveal")) {
@@ -1068,3 +1215,12 @@ document.querySelector("#load-image-file-input").addEventListener('change', func
                 alert('your browser does not support on-the-fly file upload');
             }
         });
+
+// document.addEventListener("click", function(e){
+//   updateSvgView();
+// });
+
+//make sure the view is updated after any bootstrap collapse class elements open
+$(".collapse").on('shown.bs.collapse', function () {
+  updateSvgView();
+})

@@ -611,7 +611,7 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 					String[] ids = { "text-tool", "template-button", "load-image-button", "path-tool", "line-tool",
 					        "circle-tool", "clear-all", "layer-info-vis-toggle", "edit-tool", "move-tool",
 					        "send-to-front-tool", "move-forward-tool", "move-backward-tool", "send-to-back-tool",
-					        "void-tool", "delete-tool" };
+					        "delete-tool" };
 					
 					for (String id : ids) {
 						
