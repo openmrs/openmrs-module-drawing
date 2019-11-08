@@ -105,12 +105,10 @@ SVG.on(document, 'DOMContentLoaded', function() {
   //there is no error when trying to remove these if they dont exist, but guaranteed error saving if they're duplicated, so 
   //make sure they're removed no matter what
 
-  //SVG will readd these namespace attributes, it doesnt check if they
+  //SVG.js will readd these namespace attributes, it doesnt check if they
   //already exist, which leads to an error when it is sent back to the
   //server (duplicate attribute)
-  root.removeAttribute("xmlns");
-  root.removeAttribute("xmlns:svgjs");
-  root.removeAttribute("xmlns:xlink");;
+  while(root.hasAttribute("xmlns:svgjs")) { root.removeAttribute("xmlns:svgjs"); }
   
   var domInput = document.getElementById("svgDOM")
 	if( domInput != null && domInput.value !== "" ) {
@@ -885,6 +883,13 @@ function storeSVG(){
   var node = domClone.importNode(document.getElementById("svg-container-div"), true);
   
   domClone.body.appendChild(node);
+
+  var clonedRootSvg = domClone.getElementById("root-svg");
+
+  //SVG.js will readd it's namespace attributes, it doesnt check if they
+  //already exist and adds it multiple times, which leads to an error when it is sent back to the
+  //server (duplicate attribute)
+  while(clonedRootSvg.hasAttribute("xmlns:svgjs")) { clonedRootSvg.removeAttribute("xmlns:svgjs"); }
 
 	if( selectedElements.length > 0 ) {
 		selectedElements
