@@ -718,12 +718,24 @@ function pxToInt(str) {
 function createTextGroup(text, fontSize, x, y){
   var baseGroup = drawing.group();
 
+  var scaleFactor = 0.25;
+
   //baseGroup.translate(x, y);
-  baseGroup
+  var pin = baseGroup
   	.use("pin-icon")
     .attr("x", x)
     .attr("y", y)
-    .scale(0.25, x, y);
+    .scale(scaleFactor, x, y);
+
+  var pinBBox = pin.node.getBBox();
+
+  var heightOffset = -pinBBox.height;
+  var widthOffset = -pinBBox.width/2;
+  //offset pin placement by height and half width so "pin point" is at location clicked
+  pin.dy(heightOffset).dx(widthOffset);
+
+  x += widthOffset*scaleFactor;
+  y += heightOffset*scaleFactor; 
 
   //create a second child group to make it easier to change the visibility
   var group = baseGroup.group();
