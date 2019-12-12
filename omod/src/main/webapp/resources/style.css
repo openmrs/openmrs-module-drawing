@@ -182,3 +182,8 @@
 #textarea-popup #annotation-text {
 	font-size: 1em;
 }
+
+/*_reboot.css sets svg vertical-align to "middle" which throws off the layout of the select button*/
+button svg {
+    vertical-align: unset;
+} 

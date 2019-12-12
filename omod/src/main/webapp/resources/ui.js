@@ -119,7 +119,11 @@ SVG.on(document, 'DOMContentLoaded', function() {
 		
     //store the updated markup
     updateSvgView();
-	}
+	} else {
+    //fallback to insure svgDOM is not blank, since other current factors in core, HFE and Drawing module lead to 
+    //"always" requiring creating an obs
+    storeSVG();
+  }
 
 	//this helps determine how the elements in the svg are stored, e.g. group contains marker and group with text and background
 	//which could change over time and need to be handled in a different way in e.g. addLayer()

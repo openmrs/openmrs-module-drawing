@@ -1,5 +1,6 @@
 package org.openmrs.module.drawing.elements;
 
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -10,6 +11,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import javax.imageio.ImageIO;
 import javax.servlet.http.HttpServletRequest;
 import javax.xml.parsers.ParserConfigurationException;
 
@@ -66,6 +68,10 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 	private String fixedWidth;
 	
 	private String fixedHeight;
+	
+	private String defaultViewportWidth;
+	
+	private String defaultViewportHeight;
 	
 	private String defaultTool;
 	
@@ -156,6 +162,9 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		//Preload a "template" image into the SVG
 		String preloadImage = parameters.get("preloadResImage");
 		
+		defaultViewportWidth = "500px";
+		defaultViewportHeight = "250px";
+		
 		if (preloadImage != null) {
 			
 			//get the classes path for modules
@@ -172,8 +181,13 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 			//throw if no resource was found, but if something else is going wrong
 			//this could indicate it to a module developer, even if it's not obvious to 
 			//the form designer(s)
-			base64preload = DrawingUtil.imageToBase64(preloadImageFile);
 			
+			String extension = DrawingUtil.getExtension(preloadImageFile.getName());
+			BufferedImage bi = ImageIO.read(preloadImageFile);
+			base64preload = DrawingUtil.imageToBase64(bi, extension);
+			
+			defaultViewportWidth = Integer.toString(bi.getWidth()) + "px";
+			defaultViewportHeight = Integer.toString(bi.getHeight()) + "px";
 		}
 		
 		String excludeButtons = parameters.get("excludeButtons");
@@ -332,6 +346,9 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		
 	}
 	
+	/**
+	 *
+	 */
 	@Override
 	public String generateHtml(FormEntryContext context) {
 		
@@ -418,6 +435,8 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 					imageNode.setAttribute("href", base64preload);
 					imageNode.setAttribute("data-ignore-layer", "true");
 					rootSvg.appendChild(imageNode);
+					rootSvg.setAttribute("width", defaultViewportWidth);
+					rootSvg.setAttribute("height", defaultViewportHeight);
 				}
 				
 			}
