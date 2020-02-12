@@ -432,8 +432,11 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 					//add new child <image> to root-svg
 					Element imageNode = svgWidgetTemplate.createElement("image");
 					
-					imageNode.setAttribute("href", base64preload);
+					imageNode.setAttribute("xlink:href", base64preload);
 					imageNode.setAttribute("data-ignore-layer", "true");
+					imageNode.setAttribute("width", defaultViewportWidth);
+					imageNode.setAttribute("height", defaultViewportHeight);
+					
 					rootSvg.appendChild(imageNode);
 					rootSvg.setAttribute("width", defaultViewportWidth);
 					rootSvg.setAttribute("height", defaultViewportHeight);

@@ -6,6 +6,7 @@ package org.openmrs.module.drawing;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 //import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -724,7 +725,7 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 							
 							NamedNodeMap attr = child.getAttributes();
 							
-							Node srcAttr = attr.getNamedItem("href");
+							Node srcAttr = attr.getNamedItem("xlink:href");
 							
 							URL res = OpenmrsClassLoader.getInstance().getResource("web/module/resources/red-dot.png");
 							
@@ -1035,7 +1036,9 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 						
 						NamedNodeMap attr = child.getAttributes();
 						
-						Node srcAttr = attr.getNamedItem("href");
+						Node srcAttr = attr.getNamedItem("xlink:href");
+						
+						assertNotNull("Namespaced xlink:href should not be null", srcAttr);
 						
 						URL res = OpenmrsClassLoader.getInstance().getResource("web/module/resources/red-dot.png");
 						
@@ -1136,7 +1139,9 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 						
 						NamedNodeMap attr = child.getAttributes();
 						
-						Node srcAttr = attr.getNamedItem("href");
+						Node srcAttr = attr.getNamedItem("xlink:href");
+						
+						assertNotNull("Namespaced xlink:href should not be null", srcAttr);
 						
 						URL res = OpenmrsClassLoader.getInstance().getResource("web/module/resources/red-dot.png");
 						
@@ -1245,7 +1250,9 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 						
 						NamedNodeMap attr = child.getAttributes();
 						
-						Node srcAttr = attr.getNamedItem("href");
+						Node srcAttr = attr.getNamedItem("xlink:href");
+						
+						assertNotNull("Namespaced xlink:href should not be null", srcAttr);
 						
 						URL res = OpenmrsClassLoader.getInstance().getResource("web/module/resources/red-dot.png");
 						
@@ -1299,7 +1306,7 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 				NodeList images = editedRootSvg.getElementsByTagName("image");
 				Element image = (Element) images.item(0);
 				
-				image.setAttribute("href", replacementBase64Image);
+				image.setAttribute("xlink:href", replacementBase64Image);
 				
 				String elemStr = DrawingUtil.elementToString(editedRootSvg);
 				
@@ -1364,7 +1371,7 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 					NodeList images = svgDoc.getElementsByTagName("image");
 					
 					Element image = (Element) images.item(0);
-					byte[] storedPrevImage = image.getAttribute("href").getBytes();
+					byte[] storedPrevImage = image.getAttribute("xlink:href").getBytes();
 					
 					boolean arraysDataEqual = Arrays.equals(prevImage, storedPrevImage);
 					assertTrue("Previous obs complex data should have old image", arraysDataEqual);
@@ -1392,7 +1399,11 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 					NodeList images = svgDoc.getElementsByTagName("image");
 					
 					Element image = (Element) images.item(0);
-					byte[] storedNewImage = image.getAttribute("href").getBytes();
+					byte[] storedNewImage = image.getAttribute("xlink:href").getBytes();
+					
+					boolean arraysOldDataNotEqual = Arrays.equals(prevImage, storedNewImage);
+					
+					assertFalse("New obs complex data should not be previous image data", arraysOldDataNotEqual);
 					
 					boolean arraysDataEqual = Arrays.equals(newImage, storedNewImage);
 					assertTrue("New obs complex data should have new image", arraysDataEqual);
@@ -1499,7 +1510,9 @@ public class DrawingTagHandlerTest extends BaseModuleContextSensitiveTest {
 						
 						NamedNodeMap attr = child.getAttributes();
 						
-						Node srcAttr = attr.getNamedItem("href");
+						Node srcAttr = attr.getNamedItem("xlink:href");
+						
+						assertNotNull("Namespaed xlink:href should not be null", srcAttr);
 						
 						URL res = OpenmrsClassLoader.getInstance().getResource("web/module/resources/red-dot.png");
 						

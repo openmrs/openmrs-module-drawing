@@ -81,7 +81,7 @@ function addExistingLayers(){
     "g",
     "line",
     "circle",
-    "image"
+    "use"
   ];
 
   var rootSvg = document.getElementById("root-svg");
@@ -727,7 +727,8 @@ function createTextGroup(text, fontSize, x, y){
   	.use("pin-icon")
     .attr("x", x)
     .attr("y", y)
-    .scale(scaleFactor, x, y);
+    .scale(scaleFactor, x, y)
+    .attr("data-ignore-layer", true);
 
   var pinBBox = pin.node.getBBox();
 
@@ -1224,12 +1225,52 @@ function layerSendToBack() {
 document.querySelector("#load-image-file-input").addEventListener('change', function(e) {
             if (window.File && window.FileReader && window.FileList && window.Blob) {
                 var reader = new FileReader();
-                reader.onload = function(event) {
+                reader.onload = function(readerEvent) {
                     var img = new Image();
                     
-                    var imageElement = drawing.image(event.target.result);
+                    img.src = readerEvent.target.result;
+                    img.onload= function(imgEvent){
+                    
+	                    var imageDef = drawing.defs()
+    	                					.image(this.src)
+        	            					.attr("width", this.width)
+        	            					.attr("height", this.height);
 
-                    addLayer(imageElement);
+/*
+FOP requires xlink:href be used for <image>, but browsers' support may start varying
+
+https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/xlink:href
+
+Deprecated since SVG 2
+This feature is no longer recommended. Though some browsers might still support it, it may have already been removed from the relevant web standards, may be in the process of being dropped, or may only be kept for compatibility purposes. Avoid using it, and update existing code if possible; see the compatibility table at the bottom of this page to guide your decision. Be aware that this feature may cease to work at any time.
+
+The xlink:href attribute defines a reference to a resource as a reference IRI. The exact meaning of that link depends on the context of each element using it.
+
+Note: SVG 2 removed the need for the xlink namespace, so instead of xlink:href you should use href.
+
+Since this is the case, adding a def
+and using a use tag is the simplest work around,
+
+Google Chrome	79.0.3945.130 (Official Build) (64-bit) (cohort: Stable)
+Revision	e22de67c28798d98833a7137c0e22876237fc40a-refs/branch-heads/3945@{#1047}
+OS	Windows 10 OS Version 2004 (Build 19041.84)
+JavaScript	V8 7.9.317.33
+
+when the node is added programmatically from js href is set and the image is displayed,
+ but not the xlink:href (except when loading the page with the server template?)
+
+(the other alternative would be duplicating the base64 in both attributes)
+at some point file size could be improved by only adding an new image def
+if there's no identical match
+*/
+
+						var imageElement = drawing.use(imageDef);
+	
+	                    addLayer(imageElement);
+	                    
+	                    //reset file input value to empty string so loading the same file again will be detected as a change
+	                    document.querySelector("#load-image-file-input").value="";
+                    }
                 }
                 reader.readAsDataURL(e.target.files[0]);
             } else {
