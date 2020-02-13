@@ -34,7 +34,7 @@ function extendPath(){
     init:function(e){
 
         this.set = new SVG.Set();
-
+        
         var p = this.startPoint,
         arr = [
           //"Move To" start point
@@ -180,7 +180,49 @@ SVG.on(document, 'DOMContentLoaded', function() {
         tool.draw('stop', e);
         
         updateSvgView();
-    }, false);    
+    }, false);
+
+	var curTouchId = null;
+	var extendedElemInstance = null;
+	
+	drawing.on('touchstart', function(e){
+        //console.log("touchstart occurred, tool is ", tool, "event", e);
+
+		if(curTouchId === null) {
+  			curTouchId = e.changedTouches[0].identifier;
+        	var wrapperEvent = new MouseEvent('mousedown', e.changedTouches[0]);
+        	extendedElemInstance = tool.draw(wrapperEvent);
+        }
+
+    }, false);
+
+    drawing.on('touchend', function(e){
+        //console.log("touchend occurred, tool is ", tool, "event", e);
+
+		if(e.changedTouches[0].identifier===curTouchId){
+        	var wrapperEvent = new MouseEvent('mouseup', e.changedTouches[0]);
+        	tool.draw('stop', wrapperEvent);
+        	curTouchId = null;
+        	extendedElemInstance = null;
+        }
+        
+        updateSvgView();
+    }, false);
+
+    
+    //wrap "touchmove" as window "mousemove" for svg.draw.js
+    drawing.on('touchmove', function(e){
+    
+    	//console.log("touchmove", tool, e);
+    	if(e.changedTouches[0].identifier===curTouchId){
+    		
+    		var wrapperEvent = new MouseEvent('mousemove', e.changedTouches[0]);
+       		
+       		window.dispatchEvent(wrapperEvent);
+       		
+       		e.preventDefault();
+       	}
+    }, false);
 
 	addExistingLayers();
 });
@@ -568,7 +610,7 @@ function getSelectableElement(elem, returnSVG){
     }
     
     //elem = elem.node.getElementsByTagName("text")[0];
-  } else if(elem.type === "use") {
+  } else if(elem.type === "use" && elem.data("ignore-layer")===true) {
     //select the entire parent <g> node
     elem = elem.node.parentNode;
     //.getElementsByTagName("text")[0];
