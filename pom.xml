@@ -39,7 +39,7 @@
   <properties>
     <openmrsPlatformVersion>2.2.0</openmrsPlatformVersion>
     <uiframeworkVersion>3.9</uiframeworkVersion>
-    <htmlformentryVersion>3.10.0-SNAPSHOT</htmlformentryVersion>
+    <htmlformentryVersion>3.10.0</htmlformentryVersion>
     <legacyuiVersion>1.5.0</legacyuiVersion>
     <svgdotdrawdotjsVersion>2.0.3</svgdotdrawdotjsVersion>
     <javaxServletApiVersion>3.0.1</javaxServletApiVersion>
