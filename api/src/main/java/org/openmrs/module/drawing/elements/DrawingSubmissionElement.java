@@ -8,7 +8,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
@@ -291,24 +290,6 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 				
 				actions.modifyObs(parentObs, questionConcept,
 				    new ComplexData(DrawingConstants.BASE_COMPLEX_OBS_FILENAME, svgByteArray), null, null);
-				
-				//should the modify codepath already handle setting previousObs?
-				//the new HFE code should handle this
-				Obs[] newObs = session.getSubmissionActions().getObsToCreate().parallelStream().filter(new Predicate<Obs>() {
-					
-					@Override
-					public boolean test(Obs curObsToCreate) {
-						if (curObsToCreate.isComplex() && curObsToCreate.getComplexData() != null
-						        && svgByteArray.equals(curObsToCreate.getComplexData().getData())) {
-							return true;
-						}
-						
-						return false;
-					}
-					
-				}).toArray(Obs[]::new);
-				
-				newObs[0].setPreviousVersion(parentObs);
 				
 			} else {
 				

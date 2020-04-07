@@ -59,6 +59,14 @@
 			<version>${htmlformentryVersion}</version>
 			<scope>provided</scope>
 		</dependency>
+
+		<dependency>
+			<groupId>org.openmrs.module</groupId>
+			<artifactId>htmlformentry-api-2.2</artifactId>
+			<version>${htmlformentryVersion}</version>
+			<scope>provided</scope>
+		</dependency>
+
 		
 		<!-- Adding HFE test-jar, allows utilizing RegressionTestHelper class -->
 		<dependency>

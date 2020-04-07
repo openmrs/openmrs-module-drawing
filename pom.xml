@@ -37,9 +37,9 @@
   </modules>
 
   <properties>
-    <openMRSVersion>2.2.0</openMRSVersion>
+    <openmrsPlatformVersion>2.2.0</openmrsPlatformVersion>
     <uiframeworkVersion>3.9</uiframeworkVersion>
-    <htmlformentryVersion>3.9.2</htmlformentryVersion>
+    <htmlformentryVersion>3.10.0</htmlformentryVersion>
     <legacyuiVersion>1.5.0</legacyuiVersion>
     <svgdotdrawdotjsVersion>2.0.3</svgdotdrawdotjsVersion>
     <javaxServletApiVersion>3.0.1</javaxServletApiVersion>
@@ -57,35 +57,35 @@
       <dependency>
         <groupId>org.openmrs.api</groupId>
         <artifactId>openmrs-api</artifactId>
-        <version>${openMRSVersion}</version>
+        <version>${openmrsPlatformVersion}</version>
         <type>jar</type>
         <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.openmrs.web</groupId>
         <artifactId>openmrs-web</artifactId>
-        <version>${openMRSVersion}</version>
+        <version>${openmrsPlatformVersion}</version>
         <type>jar</type>
         <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.openmrs.api</groupId>
         <artifactId>openmrs-api</artifactId>
-        <version>${openMRSVersion}</version>
+        <version>${openmrsPlatformVersion}</version>
         <type>test-jar</type>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.openmrs.web</groupId>
         <artifactId>openmrs-web</artifactId>
-        <version>${openMRSVersion}</version>
+        <version>${openmrsPlatformVersion}</version>
         <type>test-jar</type>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.openmrs.test</groupId>
         <artifactId>openmrs-test</artifactId>
-        <version>${openMRSVersion}</version>
+        <version>${openmrsPlatformVersion}</version>
         <type>pom</type>
         <scope>test</scope>
       </dependency>
@@ -140,7 +140,7 @@
             <dependency>
               <groupId>org.openmrs.tools</groupId>
               <artifactId>openmrs-tools</artifactId>
-              <version>${openMRSVersion}</version>
+              <version>${openmrsPlatformVersion}</version>
             </dependency>
           </dependencies>
         </plugin>
