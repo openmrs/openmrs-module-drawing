@@ -201,22 +201,26 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		}
 		
 		Map<Concept, List<Obs>> prevObs = context.getExistingObs();
-		
+
 		if (prevObs != null && prevObs.size() > 0) {
-			
-			parentObs = prevObs.get(questionConcept).get(0);
-			
-			//make sure the instance is loaded with complexData, according
-			//to getComplexData() comments it won't be guaranteed unless
-			//we load it this way
-			
-			//this also marks the obs as dirty, so it must always be 
-			//saved via modifyObs when in EDIT mode, even if it wasn't changed,
-			//otherwise the dirty obs flag causes saveExistingObs to be called which voids
-			//(and thereby deletes the complex obs file)
-			//by not triggering the set of the dirty flag, saveObsNotDirty
-			//will be called in ObsServiceImpl.saveObs() instead
-			parentObs = Context.getObsService().getObs(parentObs.getId());
+
+			List<Obs> obs = prevObs.get(questionConcept);
+
+			if (obs != null) {
+				parentObs = obs.get(0);
+
+				//make sure the instance is loaded with complexData, according
+				//to getComplexData() comments it won't be guaranteed unless
+				//we load it this way
+
+				//this also marks the obs as dirty, so it must always be
+				//saved via modifyObs when in EDIT mode, even if it wasn't changed,
+				//otherwise the dirty obs flag causes saveExistingObs to be called which voids
+				//(and thereby deletes the complex obs file)
+				//by not triggering the set of the dirty flag, saveObsNotDirty
+				//will be called in ObsServiceImpl.saveObs() instead
+				parentObs = Context.getObsService().getObs(parentObs.getId());
+			}
 		}
 		
 		//TODO move to static (or does it require autowiring?)
