@@ -554,7 +554,7 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 			widgetMarkup = "<span style='color:red;'>Error loading drawing element</span>";
 		}
 		
-		//If the file that contains the drawing for some reason dont exists, show an error message and send a new drawing.
+		//If the file that contains the drawing for some reason doesn't exist, show an error message and send a new drawing.
 		if (parentObs != null && parentObs.getComplexData().getData() == null && context.getMode() != Mode.ENTER) {
 			widgetMarkup = "<span style='color:red;'>"
 			        + Context.getMessageSourceService().getMessage("drawing.error.getting.drawing.file") + "</span>"
