@@ -411,7 +411,7 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 					
 				}
 				
-			} else if (ctxMode == Mode.ENTER || parentObs.getComplexData().getData() == null) {
+			} else if (ctxMode == Mode.ENTER || ( parentObs != null && parentObs.getComplexData().getData() == null) ) {
 				
 				//the image only needs to be added if this is a new form being entered
 				if (base64preload != null) {
