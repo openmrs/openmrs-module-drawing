@@ -369,7 +369,8 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 			//DrawingUtil.translateLanguageKey("drawing.save");
 			
 			//in both view and edit, load the existing svg if it exists
-			if ((ctxMode == Mode.VIEW || ctxMode == Mode.EDIT) && parentObs != null) {
+			if ((ctxMode == Mode.VIEW || ctxMode == Mode.EDIT) && parentObs != null
+			        && parentObs.getComplexData().getData() != null) {
 				
 				AnnotatedImage ai = new AnnotatedImage(new String((byte[]) parentObs.getComplexData().getData()));
 				
@@ -410,7 +411,7 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 					
 				}
 				
-			} else if (ctxMode == Mode.ENTER) {
+			} else if (ctxMode == Mode.ENTER || ( parentObs != null && parentObs.getComplexData().getData() == null) ) {
 				
 				//the image only needs to be added if this is a new form being entered
 				if (base64preload != null) {
@@ -551,6 +552,13 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		
 		if (widgetMarkup == null || widgetMarkup.isEmpty()) {
 			widgetMarkup = "<span style='color:red;'>Error loading drawing element</span>";
+		}
+		
+		//If the file that contains the drawing for some reason doesn't exist, show an error message and send a new drawing.
+		if (parentObs != null && parentObs.getComplexData().getData() == null && context.getMode() != Mode.ENTER) {
+			widgetMarkup = "<span style='color:red;'>"
+			        + Context.getMessageSourceService().getMessage("drawing.error.getting.drawing.file") + "</span>"
+			        + widgetMarkup;
 		}
 		
 		String js = "<script src=\"../../moduleResources/drawing/svg.js\"></script>"
