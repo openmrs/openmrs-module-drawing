@@ -201,18 +201,18 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 		}
 		
 		Map<Concept, List<Obs>> prevObs = context.getExistingObs();
-
+		
 		if (prevObs != null && prevObs.size() > 0) {
-
+			
 			List<Obs> obs = prevObs.get(questionConcept);
-
+			
 			if (obs != null) {
 				parentObs = obs.get(0);
-
+				
 				//make sure the instance is loaded with complexData, according
 				//to getComplexData() comments it won't be guaranteed unless
 				//we load it this way
-
+				
 				//this also marks the obs as dirty, so it must always be
 				//saved via modifyObs when in EDIT mode, even if it wasn't changed,
 				//otherwise the dirty obs flag causes saveExistingObs to be called which voids
@@ -411,7 +411,7 @@ public class DrawingSubmissionElement implements HtmlGeneratorElement, FormSubmi
 					
 				}
 				
-			} else if (ctxMode == Mode.ENTER || ( parentObs != null && parentObs.getComplexData().getData() == null) ) {
+			} else if (ctxMode == Mode.ENTER || (parentObs != null && parentObs.getComplexData().getData() == null)) {
 				
 				//the image only needs to be added if this is a new form being entered
 				if (base64preload != null) {
