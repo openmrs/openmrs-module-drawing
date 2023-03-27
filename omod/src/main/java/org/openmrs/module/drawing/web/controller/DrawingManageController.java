@@ -38,7 +38,10 @@ public class DrawingManageController {
 	
 	protected final Log log = LogFactory.getLog(getClass());
 	
+
+	
 	@RequestMapping(value = "/module/drawing/manage.form", method = RequestMethod.GET)
+
 	public void manage(ModelMap model, HttpServletRequest request) {
 		
 		if (StringUtils.isNotBlank(request.getParameter("obsId"))) {
